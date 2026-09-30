@@ -12,6 +12,8 @@ import 'package:namer_app/model/WordPairModel.dart';
 import 'package:namer_app/model/User.dart';
 
 import '../Services/Database.dart';
+import '../Services/Api.dart';
+import '../Services/TokenStore.dart';
 
 class AppStateVM extends ChangeNotifier {
   WordPairModel _current = WordPairModel(
@@ -107,14 +109,40 @@ class AppStateVM extends ChangeNotifier {
     }
   }
 
+  /// نسخه‌ی جدید: کاربر از بک‌اند D1/JWT خوانده می‌شود (بدون Firebase).
+  /// با تغییر امضا (Future<Response>? برمی‌گرداند تا فراخوان‌های
+  /// onPressed: appStateVM.refreshCurrentUser همچنان سازگار بمانند.)
   Future<void> refreshCurrentUser() async {
-    final currentFirebaseUser = firebase_auth.FirebaseAuth.instance.currentUser;
-
-    if (currentFirebaseUser != null) {
-      await _handleUserAuthState(currentFirebaseUser);
-    } else {
-      _currentUser = null;
+    try {
+      if (!TokenStore.hasSession) {
+        _currentUser = null;
+        notifyListeners();
+        return;
+      }
+      final profile = await ApiService.instance.getMyProfile();
+      _currentUser = User(
+        id: (profile['id'] ?? TokenStore.userId ?? '') as String,
+        name: (profile['name'] ?? TokenStore.name ?? 'کاربر') as String,
+        email: (profile['email'] ?? TokenStore.email ?? '') as String,
+        photoURL: (profile['photoURL'] as String?)?.isNotEmpty == true
+            ? profile['photoURL'] as String
+            : (TokenStore.photoURL?.isNotEmpty == true
+                ? TokenStore.photoURL
+                : null),
+        accountNumber: (profile['accountNumber'] as String?)?.isNotEmpty == true
+            ? profile['accountNumber'] as String
+            : null,
+        friendIds: (profile['friendIds'] as List?)?.cast<String>() ?? const [],
+      );
       notifyListeners();
+    } catch (e) {
+      print('Error refreshing current user: $e');
+      // نشست منقضی → کاربر مهمان
+      if (e is SessionExpiredException || e is ApiException && (e as ApiException).statusCode == 401) {
+        await TokenStore.clear();
+        _currentUser = null;
+        notifyListeners();
+      }
     }
   }
 

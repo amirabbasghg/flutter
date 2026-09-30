@@ -16,6 +16,17 @@ class GoogleSignInService {
     isInitialize = true;
   }
   // Sign in with Google
+  /// فقط احراز هویت گوگل و برگرداندن اکانت (برای ارسال idToken به بک‌اند).
+  /// بدون Firebase. اگر کاربر لغو کرد null برمی‌گرداند.
+  static Future<GoogleSignInAccount?> authenticateAndGetAccount() async {
+    await initSignIn();
+    try {
+      return await _googleSignIn.authenticate();
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<User?> signInWithGoogle() async {
     try {
       initSignIn();
@@ -66,8 +77,9 @@ class GoogleSignInService {
   // Sign out
   static Future<void> signOut() async {
     try {
+      // فقط sign-out محلی گوگل — بک‌اند جدید Firebase لازم ندارد.
+      // (_auth.signOut() قدیمی عمداً حذف شد تا با حالت مهمان Firebase تداخل نکند.)
       await _googleSignIn.signOut();
-      await _auth.signOut();
     } catch (e) {
       print('Error signing out: $e');
       throw e;

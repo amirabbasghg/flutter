@@ -4,6 +4,8 @@ export interface Env {
   // vars (wrangler.jsonc)
   GOOGLE_CLIENT_ID: string;
   PBKDF2_ITERATIONS?: string;
+  // اگر "production" باشد، devResetToken در پاسخ forgot برگردانده نمی‌شود.
+  ENVIRONMENT?: string;
 
   // secrets (wrangler secret put / .dev.vars)
   JWT_SECRET: string;

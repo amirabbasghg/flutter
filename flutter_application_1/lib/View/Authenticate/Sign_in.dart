@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:gradient_icon/gradient_icon.dart';
-import 'package:provider/provider.dart';
 
-import '../../Services/Auth.dart';
+import '../../Services/Api.dart';
 import '../../Services/GoogleSignInService.dart';
-import '../../ViewModel/AppStateVM.dart';
 import 'Sign_up.dart';
+import '../Home/HomePage.dart';
 
 class SignIn extends StatefulWidget {
   SignIn({super.key});
@@ -17,11 +14,53 @@ class SignIn extends StatefulWidget {
 }
 
 class _SignInState extends State<SignIn> {
-  final AuthService _authService = AuthService();
+  final ApiService _api = ApiService.instance;
   final _formKey = GlobalKey<FormState>();
   bool isVisible = true;
+  bool _loading = false;
   String _email = '';
   String _password = '';
+
+  /// ورود با بک‌اند D1/Workers. موفقیت یعنی true.
+  Future<bool> _apiLogin(String email, String password) async {
+    setState(() => _loading = true);
+    try {
+      await _api.login(email: email, password: password);
+      return true;
+    } on ApiException catch (e) {
+      if (mounted) {
+        _showErrorSnackbar(e.statusCode == 401
+            ? 'ایمیل یا رمز عبور اشتباه است'
+            : e.message);
+      }
+      return false;
+    } catch (_) {
+      if (mounted) _showErrorSnackbar('اتصال به سرور برقرار نشد');
+      return false;
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _handleGoogleIdToken(String idToken) async {
+    setState(() => _loading = true);
+    try {
+      await _api.loginWithGoogle(idToken);
+      if (mounted) {
+        _showSuccessSnackbar('ورود با گوگل انجام شد');
+        Navigator.pushReplacement(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => const HomePage()),
+                                );
+      }
+    } on ApiException catch (e) {
+      if (mounted) _showErrorSnackbar(e.message);
+    } catch (_) {
+      if (mounted) _showErrorSnackbar('ورود با گوگل انجام نشد');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -165,12 +204,27 @@ class _SignInState extends State<SignIn> {
                           return;
                         }
 
-                        bool success = await _authService.forgetPassword(_email);
-
-                        if (success) {
-                          _showSuccessSnackbar('لینک بازنشانی رمز عبور به ایمیل شما ارسال شد');
-                        } else {
-                          _showErrorSnackbar('خطا در ارسال ایمیل. لطفا مجدداً تلاش کنید');
+                        // بازیابی رمز با بک‌اند جدید (توکن یک‌بارمصرف در D1).
+                        // سرویس ایمیل هنوز وصل نشده: در حالت dev سرور خودِ توکن
+                        // را برمی‌گرداند (devResetToken) تا همین‌جا تست شود.
+                        try {
+                          final result =
+                              await _api.forgotPassword(_email.trim());
+                          if (result.success) {
+                            if (result.devResetToken != null) {
+                              _showSuccessSnackbar(
+                                  'کد بازیابی (فقط dev): ${result.devResetToken}');
+                            } else {
+                              _showSuccessSnackbar(
+                                  'لینک بازنشانی رمز عبور به ایمیل شما ارسال شد');
+                            }
+                          } else {
+                            _showErrorSnackbar('خطا در ارسال ایمیل. لطفا مجدداً تلاش کنید');
+                          }
+                        } on ApiException catch (e) {
+                          _showErrorSnackbar(e.message);
+                        } catch (_) {
+                          _showErrorSnackbar('اتصال به سرور برقرار نشد');
                         }
                       },
                       child: const Text(
@@ -199,23 +253,21 @@ class _SignInState extends State<SignIn> {
                       ],
                     ),
                     child: ElevatedButton(
-                      onPressed: () async {
-                        if (_formKey.currentState!.validate()) {
-                          // ورود با Firebase
-                          dynamic result = await _authService.signInEmailAndPassword(_email, _password);
-
-                          if (result is User) {
-                            final appState = Provider.of<AppStateVM>(context, listen: false);
-                            await appState.refreshCurrentUser();
-                            // موفقیت آمیز
-                            _showSuccessSnackbar('ورود با موفقیت انجام شد');
-                            // Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomePage()));
-                          } else if (result is String) {
-                            // خطا
-                            _showErrorSnackbar('ورود با موفقیت انجام نشد');
-                          }
-                        }
-                      },
+                      onPressed: _loading
+                          ? null
+                          : () async {
+                              if (_formKey.currentState!.validate()) {
+                                // ورود با بک‌اند جدید (D1 + JWT)
+                                final ok = await _apiLogin(_email, _password);
+                                if (ok && mounted) {
+                                  _showSuccessSnackbar('ورود با موفقیت انجام شد');
+                                  Navigator.pushReplacement(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => const HomePage()),
+                                );
+                                }
+                              }
+                            },
                       style: ElevatedButton.styleFrom(
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
@@ -223,13 +275,19 @@ class _SignInState extends State<SignIn> {
                         backgroundColor: AppColors.primary,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
-                      child: const Text(
-                        'ورود',
-                        style: TextStyle(
-                          color: Colors.black,
-                          fontSize: 20,
-                        ),
-                      ),
+                      child: _loading
+                          ? const SizedBox(
+                              height: 22,
+                              width: 22,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text(
+                              'ورود',
+                              style: TextStyle(
+                                color: Colors.black,
+                                fontSize: 20,
+                              ),
+                            ),
                     ),
                   ),
                 ),
@@ -308,15 +366,21 @@ class _SignInState extends State<SignIn> {
 
   void _handleGoogleSignIn() async {
     try {
-      User? user = await GoogleSignInService.signInWithGoogle();
-      if (user == null) {
+      // فقط idToken لازم است — دیگر نیازی به Firebase نیست.
+      await GoogleSignInService.initSignIn();
+      final account = await GoogleSignInService.authenticateAndGetAccount();
+      if (account == null) {
         _showErrorSnackbar('ورود انجام نشد');
-      } else {
-        _showSuccessSnackbar('ورود با موفقیت انجام شد ${user.displayName}');
-        // Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomePage()));
+        return;
       }
+      final idToken = account.authentication.idToken;
+      if (idToken == null) {
+        _showErrorSnackbar('توکن گوگل دریافت نشد');
+        return;
+      }
+      await _handleGoogleIdToken(idToken!);
     } catch (e) {
-      _showErrorSnackbar('ورود انجام نشد');
+      if (mounted) _showErrorSnackbar('ورود انجام نشد');
     }
   }
 

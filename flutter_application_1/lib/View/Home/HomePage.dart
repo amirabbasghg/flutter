@@ -2,7 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:namer_app/Services/Api.dart';
 import 'package:namer_app/Services/GoogleSignInService.dart';
+import 'package:namer_app/View/Authenticate/Authenticate.dart';
 import 'package:namer_app/View/Home/GroupPage.dart';
 import 'package:namer_app/View/Home/ProfilePage.dart';
 import 'package:namer_app/ViewModel/AppStateVM.dart';
@@ -90,8 +92,19 @@ class HomePage extends StatelessWidget {
                                   width: double.infinity,
                                   child: ElevatedButton.icon(
                                       onPressed: () async {
-                                          await GoogleSignInService.signOut();
-                                          Navigator.pop(context);
+                                          // خروج از بک‌اند جدید (ابطال refresh token و پاک کردن نشست محلی)
+                                          try {
+                                            await ApiService.instance.logout();
+                                          } catch (_) {}
+                                          // تا زمانی که فایربیس کاملاً حذف نشده، signOut قدیمی هم زده شود
+                                          try {
+                                            await GoogleSignInService.signOut();
+                                          } catch (_) {}
+                                          Navigator.pushAndRemoveUntil(
+                                            context,
+                                            MaterialPageRoute(builder: (_) => Authenticate()),
+                                            (route) => false,
+                                          );
                                       },
                                       icon: Icon(Icons.logout, color: Theme.of(context).colorScheme.primary),
                                       label: Text(

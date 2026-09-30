@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
+
+import '../Services/Api.dart';
+import '../Services/TokenStore.dart';
 import '../ViewModel/AppStateVM.dart';
 import 'Home/HomePage.dart';
 import 'Authenticate/Authenticate.dart';
@@ -13,54 +15,57 @@ class Wrapper extends StatefulWidget {
 }
 
 class _WrapperState extends State<Wrapper> {
-  bool _isInitializing = true;
+  late final Future<bool> _readyFuture;
 
   @override
   void initState() {
     super.initState();
-    _initializeUser();
+    _readyFuture = _resolveSession();
   }
 
-  Future<void> _initializeUser() async {
-    final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser != null) {
+  /// تعیین وضعیت ورود بر اساس TokenStore (بدون Firebase):
+  /// - نشست ذخیره‌شده باشد → یک بار getMyProfile زده می‌شود؛ اگر access token
+  ///   منقضی باشد، Api به‌صورت خودکار refresh می‌کند. موفق → کاربر وارد است.
+  /// - خطای ۴۰۱ قطعی یا SessionExpired → نشست پاک و صفحه ورود نشان داده می‌شود.
+  /// - خطای شبکه (سرور روشن نیست) → وضعیت نشست حفظ می‌شود تا کاربر مجبور به
+  ///   ورود مجدد نشود؛ درخواست‌های بعدی دوباره تلاش خواهند کرد.
+  Future<bool> _resolveSession() async {
+    if (!TokenStore.hasSession) return false;
+    try {
+      await ApiService.instance.getMyProfile();
       final appState = Provider.of<AppStateVM>(context, listen: false);
       await appState.refreshCurrentUser();
-    }
-
-    if (mounted) {
-      setState(() {
-        _isInitializing = false;
-      });
+      return true;
+    } on SessionExpiredException {
+      await TokenStore.clear();
+      return false;
+    } on ApiException catch (e) {
+      if (e.statusCode == 401 || e.statusCode == 403) {
+        await TokenStore.clear();
+        return false;
+      }
+      // 5xx یا خطای دیگر: نشست را از دست نده
+      return true;
+    } catch (_) {
+      // خطای شبکه یا هر چیز دیگر: نشست حفظ شود
+      return true;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isInitializing) {
-      return Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
-    }
-
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
+    return FutureBuilder<bool>(
+      future: _readyFuture,
       builder: (context, snapshot) {
-        // if (snapshot.connectionState == ConnectionState.waiting) {
-        //   return Scaffold(
-        //     body: Center(
-        //       child: CircularProgressIndicator(),
-        //     ),
-        //   );
-        // }
-
-        if (snapshot.hasData && snapshot.data != null) {
-          return HomePage();
-        } else {
-          return Authenticate();
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
         }
+        if (snapshot.data == true) {
+          return const HomePage();
+        }
+        return Authenticate();
       },
     );
   }

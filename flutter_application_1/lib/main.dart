@@ -2,7 +2,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart'; // این import را اضافه کنید
-import 'package:namer_app/Model/Expense.dart';
 import 'package:namer_app/Model/Group.dart';
 import 'package:namer_app/View/Authenticate/Authenticate.dart';
 import 'package:namer_app/View/Wrapper.dart';
@@ -10,8 +9,8 @@ import 'package:persian_datetime_picker/persian_datetime_picker.dart' as pdp;
 import 'package:provider/provider.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
+import 'Services/TokenStore.dart';
 import 'Model/User.dart';
-import 'View/Home/HomePage.dart';
 import 'ViewModel/AppStateVM.dart';
 import 'ViewModel/HomeVM.dart';
 
@@ -19,6 +18,10 @@ void main() async {
   // Initialize Hive
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
+
+  // باز کردن باکس احراز هویت (TokenStore) — قبل از runApp لازم است
+  await Hive.initFlutter();
+  await TokenStore.init();
 
   // Register Hive adapters
 
