@@ -81,6 +81,7 @@ function makeStmt(sql: string) {
     else if (n.includes("from group_members") && n.includes("group_id = ? and user_id = ?")) rows = db.group_members.filter(r => r.group_id === bindings[0] && r.user_id === bindings[1]);
     else if (n.includes("from group_members") && n.includes("where group_id = ?")) rows = db.group_members.filter(r => r.group_id === bindings[0]);
     else if (n.includes("from expenses") && n.includes("where id = ?")) rows = db.expenses.filter(r => r.id === bindings[0]);
+    else if (n.includes("from expenses") && n.includes("where group_id = ?")) rows = db.expenses.filter(r => r.group_id === bindings[0]).map(e => ({ id: e.id }));
     else if (n.includes("from expense_participants")) rows = db.expense_participants.filter(r => r.expense_id === bindings[0]);
     else if (n.includes("from expense_splits")) rows = db.expense_splits.filter(r => r.expense_id === bindings[0]);
     else if (n.includes("from refresh_tokens")) rows = db.refresh_tokens.filter(r => r.token_hash === bindings[0]);
@@ -190,16 +191,16 @@ res = await handleCreateGroup(req("POST", "/api/groups", { id: groupId, name: "T
   res = await handleLogin(req("POST", "/api/auth/login", { email: "out@test.com", password: "password789" }), env);
   const outTok = (await res.json<any>()).accessToken;
 
-    res = await handleAddMember(req("POST", `/api/groups/${groupId}/members`, { userId: reza.id }, aliLogin.accessToken), env);
+    res = await handleAddMember(req("POST", `/api/groups/${groupId}/members`, { userId: reza.id }, aliLogin.accessToken), env, groupId);
   check("ali adds reza 201", res.status === 201, await res.clone().json());
-  res = await handleAddMember(req("POST", `/api/groups/${groupId}/members`, { userId: out.id }, reza.accessToken), env);
+  res = await handleAddMember(req("POST", `/api/groups/${groupId}/members`, { userId: out.id }, reza.accessToken), env, groupId);
   check("non-creator addMember 403", res.status === 403, res.status);
 
   // outsider cannot see group
-  res = await handleGetGroup(req("GET", `/api/groups/${groupId}`, undefined, outTok), env);
+  res = await handleGetGroup(req("GET", `/api/groups/${groupId}`, undefined, outTok), env, groupId);
   check("outsider GET group 403", res.status === 403, res.status);
   // member can see group
-  res = await handleGetGroup(req("GET", `/api/groups/${groupId}`, undefined, reza.accessToken), env);
+  res = await handleGetGroup(req("GET", `/api/groups/${groupId}`, undefined, reza.accessToken), env, groupId);
   check("member GET group 200", res.status === 200);
 
   // ali creates expense with both participants
@@ -212,37 +213,37 @@ res = await handleCreateGroup(req("POST", "/api/groups", { id: groupId, name: "T
   await res.json<any>();
 
   // outsider cannot get expense
-  res = await handleGetExpense(req("GET", `/api/expenses/${expenseId}`, undefined, outTok), env);
+  res = await handleGetExpense(req("GET", `/api/expenses/${expenseId}`, undefined, outTok), env, expenseId);
   check("outsider GET expense 403", res.status === 403, res.status);
   // member can get expense
-  res = await handleGetExpense(req("GET", `/api/expenses/${expenseId}`, undefined, reza.accessToken), env);
+  res = await handleGetExpense(req("GET", `/api/expenses/${expenseId}`, undefined, reza.accessToken), env, expenseId);
   check("member GET expense 200", res.status === 200);
 
   // outsider cannot update expense
-  res = await handleUpdateExpense(req("PUT", `/api/expenses/${expenseId}`, { description: "hacked" }, outTok), env);
+  res = await handleUpdateExpense(req("PUT", `/api/expenses/${expenseId}`, { description: "hacked" }, outTok), env, expenseId);
   check("outsider PUT expense 403", res.status === 403, res.status);
   // member can update expense
-  res = await handleUpdateExpense(req("PUT", `/api/expenses/${expenseId}`, { description: "lunch" }, reza.accessToken), env);
+  res = await handleUpdateExpense(req("PUT", `/api/expenses/${expenseId}`, { description: "lunch" }, reza.accessToken), env, expenseId);
   check("member PUT expense 200", res.status === 200, await res.clone().json());
   // update to move to nonexistent group must fail
-  res = await handleUpdateExpense(req("PUT", `/api/expenses/${expenseId}`, { groupId: "no-such-group" }, reza.accessToken), env);
+  res = await handleUpdateExpense(req("PUT", `/api/expenses/${expenseId}`, { groupId: "no-such-group" }, reza.accessToken), env, expenseId);
   check("PUT expense bad group 404/400", res.status === 404 || res.status === 400, res.status);
 
   // outsider cannot delete expense
-  res = await handleDeleteExpense(req("DELETE", `/api/expenses/${expenseId}`, undefined, outTok), env);
+  res = await handleDeleteExpense(req("DELETE", `/api/expenses/${expenseId}`, undefined, outTok), env, expenseId);
   check("outsider DELETE expense 403", res.status === 403, res.status);
   // no token at all
-  res = await handleDeleteExpense(req("DELETE", `/api/expenses/${expenseId}`), env);
+  res = await handleDeleteExpense(req("DELETE", `/api/expenses/${expenseId}`), env, expenseId);
   check("no-token DELETE expense 401", res.status === 401, res.status);
   // member deletes
-  res = await handleDeleteExpense(req("DELETE", `/api/expenses/${expenseId}`, undefined, reza.accessToken), env);
+  res = await handleDeleteExpense(req("DELETE", `/api/expenses/${expenseId}`, undefined, reza.accessToken), env, expenseId);
   check("member DELETE expense 200", res.status === 200, await res.clone().json());
   // deleting again -> 404
-  res = await handleDeleteExpense(req("DELETE", `/api/expenses/${expenseId}`, undefined, reza.accessToken), env);
+  res = await handleDeleteExpense(req("DELETE", `/api/expenses/${expenseId}`, undefined, reza.accessToken), env, expenseId);
   check("deleted expense 404", res.status === 404, res.status);
 
   // tampered token
-  res = await handleGetGroup(req("GET", `/api/groups/${groupId}`, undefined, aliLogin.accessToken + "xx"), env);
+  res = await handleGetGroup(req("GET", `/api/groups/${groupId}`, undefined, aliLogin.accessToken + "xx"), env, groupId);
   check("tampered token 401", res.status === 401);
 
   console.log(`\nRESULT: ${pass} passed, ${fail} failed`);
