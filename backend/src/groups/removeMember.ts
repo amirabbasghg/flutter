@@ -1,5 +1,6 @@
 import { Env } from "../types";
 import { response } from "../utils/response";
+import { authenticate } from "../auth/middleware";
 
 export async function handleRemoveMember(
   request: Request,
@@ -8,7 +9,13 @@ export async function handleRemoveMember(
   userId: string
 ): Promise<Response> {
   try {
-    // دریافت سازنده گروه
+    const authenticatedUserId = await authenticate(request, env);
+    if (authenticatedUserId instanceof Response) {
+      return authenticatedUserId;
+    }
+
+    // سازنده گروه یا خودِ کاربر می‌توانند عضو را حذف کنند
+    // (کاربر دیگر نمی‌تواند بقیه را بیرون بیندازد)
     const group = await env.expense_app_db
       .prepare(`
         SELECT created_by
@@ -20,6 +27,13 @@ export async function handleRemoveMember(
 
     if (!group) {
       return response({ error: "Group not found" }, 404);
+    }
+
+    const isCreator = authenticatedUserId === group.created_by;
+    const isSelf = authenticatedUserId === userId;
+
+    if (!isCreator && !isSelf) {
+      return response({ error: "Forbidden" }, 403);
     }
 
     // سازنده گروه نباید از گروه حذف شود

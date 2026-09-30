@@ -17,3 +17,6 @@ export type UserRow = {
   photo_url: string | null;
   account_number: string | null;
 };
+
+// نتیجه‌ی authenticate(): یا userId و یا یک Response آماده (۴۰۱) برای برگرداندن.
+export type AuthResult = string | Response;
