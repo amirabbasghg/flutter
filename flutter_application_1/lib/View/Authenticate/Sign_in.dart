@@ -42,7 +42,7 @@ class _SignInState extends State<SignIn> {
     }
   }
 
-  void _handleGoogleIdToken(String idToken) async {
+  Future<void> _handleGoogleIdToken(String idToken) async {
     setState(() => _loading = true);
     try {
       await _api.loginWithGoogle(idToken);
@@ -50,7 +50,7 @@ class _SignInState extends State<SignIn> {
         _showSuccessSnackbar('ورود با گوگل انجام شد');
         Navigator.pushReplacement(
                                   context,
-                                  MaterialPageRoute(builder: (_) => const HomePage()),
+                                  MaterialPageRoute(builder: (_) => HomePage()),
                                 );
       }
     } on ApiException catch (e) {
@@ -263,7 +263,7 @@ class _SignInState extends State<SignIn> {
                                   _showSuccessSnackbar('ورود با موفقیت انجام شد');
                                   Navigator.pushReplacement(
                                   context,
-                                  MaterialPageRoute(builder: (_) => const HomePage()),
+                                  MaterialPageRoute(builder: (_) => HomePage()),
                                 );
                                 }
                               }

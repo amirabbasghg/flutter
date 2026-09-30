@@ -63,7 +63,7 @@ class _WrapperState extends State<Wrapper> {
           );
         }
         if (snapshot.data == true) {
-          return const HomePage();
+          return HomePage();
         }
         return Authenticate();
       },

@@ -183,10 +183,10 @@ class ApiService {
     _isRefreshing = true;
     final ok = await _tryRefresh();
     _isRefreshing = false;
-    _pending!.complete(ok);
-    final slot = _pending;
+    final slot = _pending!;
+    slot.complete(ok);
     _pending = null;
-    return slot.future;
+    return ok;
   }
 
   dynamic _handle(http.Response res) {
