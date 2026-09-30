@@ -1,0 +1,2 @@
+JWT_SECRET=change-me-to-a-long-random-string
+PASSWORD_PEPPER=change-me-to-another-long-random-string
