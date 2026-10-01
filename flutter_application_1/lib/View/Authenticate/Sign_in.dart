@@ -3,8 +3,8 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import '../../Services/Api.dart';
-import '../../Services/GoogleSignInService.dart';
 import '../../ViewModel/AppStateVM.dart';
+import 'GoogleAuthButton.dart';
 import 'Sign_up.dart';
 import '../Home/HomePage.dart';
 
@@ -309,40 +309,11 @@ class _SignInState extends State<SignIn> {
                 ),
                 const SizedBox(height: 10),
                 Center(
-                  child: ElevatedButton.icon(
-                    onPressed: () async {
-                      _handleGoogleSignIn();
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.text,
-                      foregroundColor: AppColors.background,
-                      elevation: 100,
-                      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                    ),
-                    icon: ShaderMask(
-                      shaderCallback: (Rect bounds) {
-                        return LinearGradient(
-                          colors: [
-                            Colors.red,
-                            Colors.yellow,
-                            Colors.green,
-                            Colors.blue,
-                          ],
-                          stops: [0.0, 0.4, 0.7, 0.9],
-                        ).createShader(bounds);
-                      },
-                      child: FaIcon(
-                        FontAwesomeIcons.google,
-                        size: 28,
-                        color: Colors.white,
-                      ),
-                    ),
-                    label: Text(
-                      'ورود با گوگل',
-                      style: TextStyle(
-                        fontSize: 14,
-                      ),
-                    ),
+                  child: GoogleAuthButton(
+                    label: 'ورود با گوگل',
+                    enabled: !_loading,
+                    onIdToken: _handleGoogleIdToken,
+                    onError: _showErrorSnackbar,
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -369,26 +340,6 @@ class _SignInState extends State<SignIn> {
         ),
       ),
     );
-  }
-
-  void _handleGoogleSignIn() async {
-    try {
-      // فقط idToken لازم است — دیگر نیازی به Firebase نیست.
-      await GoogleSignInService.initSignIn();
-      final account = await GoogleSignInService.authenticateAndGetAccount();
-      if (account == null) {
-        _showErrorSnackbar('ورود انجام نشد');
-        return;
-      }
-      final idToken = account.authentication.idToken;
-      if (idToken == null) {
-        _showErrorSnackbar('توکن گوگل دریافت نشد');
-        return;
-      }
-      await _handleGoogleIdToken(idToken);
-    } catch (e) {
-      if (mounted) _showErrorSnackbar('ورود انجام نشد');
-    }
   }
 
   void _showErrorSnackbar(String message) {

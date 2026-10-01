@@ -3,8 +3,8 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import '../../Services/Api.dart';
-import '../../Services/GoogleSignInService.dart';
 import '../../ViewModel/AppStateVM.dart';
+import 'GoogleAuthButton.dart';
 import '../Home/HomePage.dart';
 
 class SignUp extends StatefulWidget {
@@ -236,37 +236,11 @@ class _SignUpState extends State<SignUp> {
                 ),
                 const SizedBox(height: 10),
                 Center(
-                  child: ElevatedButton.icon(
-                    onPressed: _loading ? null : () => _handleGoogleSignIn(),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.text,
-                      foregroundColor: AppColors.background,
-                      elevation: 100,
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                    ),
-                    icon: ShaderMask(
-                      shaderCallback: (Rect bounds) {
-                        return const LinearGradient(
-                          colors: [
-                            Colors.red,
-                            Colors.yellow,
-                            Colors.green,
-                            Colors.blue,
-                          ],
-                          stops: [0.0, 0.4, 0.7, 0.9],
-                        ).createShader(bounds);
-                      },
-                      child: const FaIcon(
-                        FontAwesomeIcons.google,
-                        size: 28,
-                        color: Colors.white,
-                      ),
-                    ),
-                    label: const Text(
-                      'ثبت نام با گوگل',
-                      style: TextStyle(fontSize: 14),
-                    ),
+                  child: GoogleAuthButton(
+                    label: 'ثبت نام با گوگل',
+                    enabled: !_loading,
+                    onIdToken: _loginWithGoogleIdToken,
+                    onError: _showErrorSnackbar,
                   ),
                 ),
               ],
@@ -277,24 +251,12 @@ class _SignUpState extends State<SignUp> {
     );
   }
 
-  /// ثبت‌نام/ورود با گوگل بدون Firebase:
-  /// فقط idToken از گوگل گرفته و به POST /api/auth/google فرستاده می‌شود.
-  /// اگر اکانت با آن ایمیل وجود داشته باشد لاگین، وگرنه کاربر جدید ساخته می‌شود.
-  void _handleGoogleSignIn() async {
+  /// ثبت‌نام/ورود با گوگل بدون Firebase: توکن گوگل (از دکمه‌ی موبایل یا از
+  /// دکمه‌ی رسمی وب) به POST /api/auth/google فرستاده می‌شود. اگر اکانتی با آن
+  /// ایمیل وجود داشته باشد لاگین می‌شود، وگرنه کاربر جدید ساخته می‌شود.
+  Future<void> _loginWithGoogleIdToken(String idToken) async {
+    setState(() => _loading = true);
     try {
-      setState(() => _loading = true);
-      await GoogleSignInService.initSignIn();
-      final account = await GoogleSignInService.authenticateAndGetAccount();
-      if (!mounted) return;
-      if (account == null) {
-        _showErrorSnackbar('ثبت نام انجام نشد');
-        return;
-      }
-      final idToken = account.authentication.idToken;
-      if (idToken == null) {
-        _showErrorSnackbar('توکن گوگل دریافت نشد');
-        return;
-      }
       await _api.loginWithGoogle(idToken);
       if (mounted) {
         _showSuccessSnackbar('ثبت نام با موفقیت انجام شد');

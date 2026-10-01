@@ -1,0 +1,21 @@
+{
+  // میزبانی فرانت‌اند (خروجی وبِ فلاتر) روی Cloudflare.
+  // بک‌اند یک ورکر جداست: backend/wrangler.jsonc → backend.mhsyny293.workers.dev
+  //
+  // دیپلوی:  flutter build web --release  &&  npx wrangler deploy
+  //
+  // «directory» باید خروجی بیلد باشد، نه پوشه‌ی منبع web/ — آن فقط قالب است و
+  // index.html اش هنوز جای‌گزین $FLUTTER_BASE_HREF را دارد و main.dart.js ندارد.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "expense-app",
+  "compatibility_date": "2026-10-01",
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "directory": "build/web",
+    // اپ فلاتر تک‌صفحه‌ای است: هر مسیری که فایل ثابتی نداشته باشد باید
+    // index.html بگیرد تا رفرش روی مسیرهای داخلی ۴۰۴ ندهد.
+    "not_found_handling": "single-page-application"
+  }
+}
