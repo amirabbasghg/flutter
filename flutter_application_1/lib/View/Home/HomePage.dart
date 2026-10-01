@@ -1,7 +1,5 @@
 // view/home_page.dart
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
 import 'package:namer_app/Services/GoogleSignInService.dart';
 import 'package:namer_app/View/Authenticate/Authenticate.dart';
 import 'package:namer_app/View/Home/GroupPage.dart';
@@ -10,6 +8,7 @@ import 'package:namer_app/ViewModel/AppStateVM.dart';
 import 'package:provider/provider.dart';
 
 import '../../ViewModel/HomeVM.dart';
+import '../../ViewModel/ThemeVM.dart';
 
 import 'MemberPage.dart';
 import 'ServicesScreen.dart';
@@ -87,6 +86,8 @@ class HomePage extends StatelessWidget {
                                   )
                               ),
                               SizedBox(height: 10,),
+                              const _ThemeModePicker(),
+                              SizedBox(height: 10,),
                               Container(
                                   width: double.infinity,
                                   child: ElevatedButton.icon(
@@ -143,6 +144,7 @@ class HomePage extends StatelessWidget {
                           children: [
                             IconButton(
                                 onPressed: appStateVM.reload,
+                                tooltip: 'تازه‌سازی',
                                 icon: Icon(Icons.refresh, color: Colors.white),
                                 // style: IconButton.styleFrom(
                                 //     backgroundColor: Colors.white,
@@ -152,6 +154,7 @@ class HomePage extends StatelessWidget {
                               SizedBox(width: 10,),
                               IconButton(
                                   onPressed: _showMenuPanel,
+                                  tooltip: 'منو',
                                   icon: Icon(Icons.menu, color: Colors.white),
                                   // style: IconButton.styleFrom(
                                   //     backgroundColor: Colors.white,
@@ -174,26 +177,90 @@ class HomePage extends StatelessWidget {
                     //     label: 'Favorites',
                     // ),
                     BottomNavigationBarItem(
-                        icon: Icon(Icons.account_circle_rounded),
-                        label: 'members',
+                        icon: Icon(Icons.people_alt_outlined),
+                        activeIcon: Icon(Icons.people_alt),
+                        label: 'دوستان',
                     ),
                     BottomNavigationBarItem(
-                        icon: Icon(Icons.group),
-                        label: 'groups',
+                        icon: Icon(Icons.groups_outlined),
+                        activeIcon: Icon(Icons.groups),
+                        label: 'گروه‌ها',
                     ),
                     BottomNavigationBarItem(
-                        icon: Icon(Icons.attach_money),
-                        label: 'expense',
+                        icon: Icon(Icons.account_balance_wallet_outlined),
+                        activeIcon: Icon(Icons.account_balance_wallet),
+                        label: 'هزینه‌ها',
                     ),
                 ],
                 currentIndex: homeVM.selectedIndex,
                 onTap: (index) {
                     homeVM.setSelectedIndex(index);
                 },
-                selectedItemColor: Theme.of(context).primaryColor,
-                unselectedItemColor: Theme.of(context).disabledColor
             ),
         );
     }
 
+}
+
+/// انتخاب حالت تم در پنل منو: روشن / تیره / خودکار.
+class _ThemeModePicker extends StatelessWidget {
+    const _ThemeModePicker();
+
+    @override
+    Widget build(BuildContext context) {
+        final themeVM = context.watch<ThemeVM>();
+        final theme = Theme.of(context);
+
+        return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                    Row(
+                        children: [
+                            Icon(themeVM.icon, size: 20),
+                            const SizedBox(width: 8),
+                            Text('حالت نمایش',
+                                style: theme.textTheme.bodyMedium
+                                    ?.copyWith(fontWeight: FontWeight.bold)),
+                        ],
+                    ),
+                    const SizedBox(height: 10),
+                    SegmentedButton<ThemeMode>(
+                        segments: const [
+                            ButtonSegment(
+                                value: ThemeMode.light,
+                                icon: Icon(Icons.light_mode, size: 18),
+                                label: Text('روشن'),
+                            ),
+                            ButtonSegment(
+                                value: ThemeMode.dark,
+                                icon: Icon(Icons.dark_mode, size: 18),
+                                label: Text('تیره'),
+                            ),
+                            ButtonSegment(
+                                value: ThemeMode.system,
+                                icon: Icon(Icons.brightness_auto, size: 18),
+                                label: Text('خودکار'),
+                            ),
+                        ],
+                        selected: {themeVM.mode},
+                        showSelectedIcon: false,
+                        style: ButtonStyle(
+                            visualDensity: VisualDensity.compact,
+                            textStyle: WidgetStatePropertyAll(
+                                theme.textTheme.labelSmall),
+                        ),
+                        onSelectionChanged: (selection) =>
+                            themeVM.setMode(selection.first),
+                    ),
+                ],
+            ),
+        );
+    }
 }

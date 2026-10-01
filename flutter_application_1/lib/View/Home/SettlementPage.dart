@@ -47,14 +47,20 @@ class _SettlementPageState extends State<SettlementPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final appStateVM = Provider.of<AppStateVM>(context, listen: false);
       final currentUser = appStateVM.currentUser;
-      if (currentUser != null) {
-        final userGroups = appStateVM.groups.where((group) =>
-            group.memberIds.contains(currentUser.id)).toList();
+      if (currentUser == null) return;
 
-        setState(() {
-          _selectedGroupIds.addAll(userGroups.map((g) => g.id));
-        });
-      }
+      final userGroups = appStateVM.groups
+          .where((group) => group.memberIds.contains(currentUser.id))
+          .toList();
+      if (userGroups.isEmpty) return;
+
+      // ⚠️ قبلاً همه‌ی گروه‌ها یک‌جا انتخاب می‌شدند و بدهی‌ها بین گروه‌ها با هم
+      // جمع/خنثی می‌شد — یعنی «مبلغ همه‌ی گروه‌ها» در یک عدد نشان داده می‌شد.
+      // تسویه ذاتاً درون‌گروهی است، پس پیش‌فرض فقط تازه‌ترین گروه انتخاب می‌شود
+      // و کاربر در صورت نیاز از دکمه‌ی «فیلتر» بقیه را اضافه می‌کند.
+      setState(() {
+        _selectedGroupIds.add(userGroups.first.id);
+      });
     });
   }
 
@@ -67,7 +73,7 @@ class _SettlementPageState extends State<SettlementPage> {
 
     if (currentUser == null) {
       return Scaffold(
-        backgroundColor: Colors.grey.shade50,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -94,12 +100,15 @@ class _SettlementPageState extends State<SettlementPage> {
     final debtSummary = _calculateDebts(filteredExpenses, allUsers);
 
     return Theme(
+      // ⚠️ قبلاً اینجا ColorScheme.light بود که صفحه را حتی در حالت تیره هم
+      // روشن نگه می‌داشت. فقط رنگ اصلی override می‌شود، نه کل طرح‌رنگ.
       data: Theme.of(context).copyWith(
         primaryColor: _primaryColor,
-        colorScheme: ColorScheme.light(primary: _primaryColor),
+        colorScheme:
+            Theme.of(context).colorScheme.copyWith(primary: _primaryColor),
       ),
       child: Scaffold(
-        backgroundColor: Colors.grey.shade50,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         appBar: AppBar(
           title: const Text(
             '💰 تسویه حساب',
@@ -422,7 +431,11 @@ class _SettlementPageState extends State<SettlementPage> {
 
   // کارت خلاصه وضعیت
   Widget _buildSummaryCard(Map<User, double> debts, int expenseCount, BuildContext context) {
-    final totalDebt = debts.values.fold(0.0, (sum, debt) => sum + debt.abs());
+    // هر هزینه دو طرف دارد: طلبکار با +X و بدهکار با -X. جمعِ قدرمطلق‌ها دقیقاً
+    // دو برابر پولی است که باید جابه‌جا شود، پس فقط طرف مثبت جمع می‌شود.
+    final totalDebt = debts.values
+        .where((debt) => debt > 0)
+        .fold(0.0, (sum, debt) => sum + debt);
     final numberOfTransactions = debts.values.where((debt) => debt != 0).length;
     final formatter = NumberFormat("#,###");
 
@@ -1127,7 +1140,9 @@ class _SettlementPageState extends State<SettlementPage> {
             width: 1,
           ),
         ),
-        color: isEven ? Colors.white : Colors.grey.shade50,
+        color: isEven
+            ? Theme.of(context).cardColor
+            : Theme.of(context).colorScheme.surfaceContainerHighest,
         child: ListTile(
           leading: Container(
             width: 44,

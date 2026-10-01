@@ -7,8 +7,10 @@ import 'package:provider/provider.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import 'Services/TokenStore.dart';
+import 'Theme/AppTheme.dart';
 import 'ViewModel/AppStateVM.dart';
 import 'ViewModel/HomeVM.dart';
+import 'ViewModel/ThemeVM.dart';
 
 void main() async {
   // Initialize Hive
@@ -17,6 +19,7 @@ void main() async {
   // باز کردن باکس احراز هویت (TokenStore) — قبل از runApp لازم است
   await Hive.initFlutter();
   await TokenStore.init();
+  await ThemeVM.init();
 
   // Register Hive adapters
 
@@ -40,6 +43,7 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (context) => AppStateVM()),
         ChangeNotifierProvider(create: (context) => HomeVM()),
+        ChangeNotifierProvider(create: (context) => ThemeVM()),
       ],
       // ⚠️ اینجا قبلاً Consumer<AppStateVM> + FutureBuilder(appState.initialize())
       // بود. چون initialize() داخل build صدا زده می‌شد، هر notifyListeners یک
@@ -47,12 +51,15 @@ class MyApp extends StatelessWidget {
       // خودش notifyListeners می‌زد → حلقه‌ی بی‌پایان و چند برابر شدن لیسنرها.
       // MaterialApp به appState وابسته نیست، پس مستقیم ساخته می‌شود و
       // مقداردهی اولیه در سازنده‌ی AppStateVM انجام می‌گیرد.
-      child: MaterialApp(
-        title: 'Namer App',
-        theme: ThemeData(
-          useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        ),
+      // فقط ThemeVM اینجا watch می‌شود. AppStateVM عمداً watch نمی‌شود چون
+      // هر notifyListeners آن باعث بازسازی کل MaterialApp می‌شد.
+      child: Consumer<ThemeVM>(
+        builder: (context, themeVM, _) => MaterialApp(
+        title: 'مدیریت هزینه‌ها',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light,
+        darkTheme: AppTheme.dark,
+        themeMode: themeVM.mode,
         locale: const Locale("fa"),
         localizationsDelegates: const [
           GlobalMaterialLocalizations.delegate,
@@ -66,6 +73,7 @@ class MyApp extends StatelessWidget {
           Locale("en"),
         ],
         home: const Wrapper(),
+        ),
       ),
     );
   }
