@@ -1,1 +1,153 @@
-(empty)
+# ============================================================================
+# .gitignore ریشه‌ی مخزن.
+#
+# این مخزن چند پروژه را کنار هم دارد: اپ فلاتر (flutter_application_1)، بک‌اند
+# Cloudflare Workers (backend) و چند پروژه‌ی داربست قدیمی (first، my_njh،
+# my_njhkjkj، new_app). هر کدام .gitignore خودشان را هم دارند؛ این فایل
+# الگوهای مشترک را برای همه‌شان پوشش می‌دهد تا چیزی از قلم نیفتد.
+#
+# نکته: اگر فایلی قبلاً track شده باشد، اضافه کردن الگو به اینجا آن را نادیده
+# نمی‌گیرد. برای چنین فایلی باید `git rm --cached <path>` زد (فایل روی دیسک
+# می‌ماند، فقط از index حذف می‌شود).
+# ============================================================================
+
+
+# ──────────────────────────── سیستم‌عامل و ادیتور ───────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+desktop.ini
+*~
+*.swp
+*.swo
+
+# JetBrains / Android Studio
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# VS Code — تنظیمات مشترک تیم بماند، وضعیت محلی نرود
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+
+# ───────────────────────────── راز و کلید ───────────────────────────────────
+# هیچ‌وقت نباید کامیت شوند. نمونه‌ها (*.example) عمداً مستثنا شده‌اند.
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+*.pem
+*.p12
+*.jks
+*.keystore
+**/android/key.properties
+secrets.json
+service-account*.json
+
+
+# ───────────────────────────── Flutter / Dart ───────────────────────────────
+.dart_tool/
+.packages
+.pub/
+.pub-cache/
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+**/doc/api/
+**/ios/Flutter/.last_build_id
+migrate_working_dir/
+coverage/
+*.dart.js
+*.info.json
+
+# خروجی symbolication و obfuscation
+app.*.symbols
+app.*.map.json
+
+# pubspec.lock برای یک اپ (برخلاف پکیج) باید track شود — عمداً اینجا نیست.
+
+
+# ───────────────────────────── اندروید ──────────────────────────────────────
+**/android/.gradle/
+**/android/.kotlin/
+**/android/captures/
+**/android/build/
+**/android/app/build/
+**/android/app/debug/
+**/android/app/profile/
+**/android/app/release/
+# مسیر SDK فلاتر مخصوص همین کامپیوتر است
+**/android/local.properties
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+
+
+# ──────────────────────────── iOS / macOS ───────────────────────────────────
+**/ios/Flutter/ephemeral/
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/ServiceDefinitions.json
+**/macos/Flutter/ephemeral/
+**/Pods/
+**/*.xcworkspace/xcuserdata/
+**/*.xcodeproj/xcuserdata/
+**/*.xcodeproj/project.xcworkspace/xcuserdata/
+DerivedData/
+*.moved-aside
+*.pbxuser
+*.perspectivev3
+
+
+# ──────────────────────── لینوکس / ویندوز دسکتاپ ────────────────────────────
+# فقط ephemeral نادیده گرفته می‌شود. فایل‌های generated_plugin_registrant.cc/.h
+# و generated_plugins.cmake را خود فلاتر commit می‌کند و بدون آن‌ها بیلد دسکتاپ
+# روی یک checkout تازه کار نمی‌کند.
+**/linux/flutter/ephemeral/
+**/windows/flutter/ephemeral/
+
+
+# ──────────────────── Node.js و Cloudflare Workers ──────────────────────────
+node_modules/
+jspm_packages/
+.npm
+.yarn/cache
+.yarn/unplugged
+.pnp.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.tsbuildinfo
+.eslintcache
+dist/
+out/
+.nyc_output/
+
+# wrangler
+.wrangler/
+wrangler.log
+
+
+# ──────────────────────────────── سایر ──────────────────────────────────────
+*.log
+tmp/
+temp/
+.cache/
