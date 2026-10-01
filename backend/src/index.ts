@@ -23,6 +23,11 @@ import { handleGoogleLogin } from "./auth/google";
 import { handleForgotPassword, handleResetPassword } from "./auth/passwordReset";
 import { authenticate } from "./auth/middleware";
 import { handleGetMyGroups } from "./me/getGroups";
+import { handleGetMyExpenses } from "./me/getExpenses";
+import { handleGetContacts } from "./me/getContacts";
+import { handleBootstrap } from "./me/bootstrap";
+import { handleUpdateMe } from "./me/updateMe";
+import { handleSearchUsers } from "./users/searchUsers";
 import { handleGetGroupExpenses } from "./groups/getExpenses";
 
 // مسیرهایی که بدون توکن در دسترس‌اند. بقیه‌ی /api/* نیاز به ورود دارند.
@@ -60,9 +65,37 @@ export default {
         // auth همان userId است؛ در گام ۲ برای چک دسترسی استفاده می‌شود
       }
 
+      // ---- مسیرهای کاربر واردشده (/api/me/*) ----
+      // همه‌ی داده‌های اولیه در یک درخواست: GET /api/me/bootstrap
+      if (request.method === "GET" && path === "/api/me/bootstrap") {
+        return handleBootstrap(request, env);
+      }
+
       // لیست گروه‌های کاربر واردشده: GET /api/me/groups
       if (request.method === "GET" && path === "/api/me/groups") {
         return handleGetMyGroups(request, env);
+      }
+
+      // هزینه‌های همه‌ی گروه‌های کاربر: GET /api/me/expenses
+      if (request.method === "GET" && path === "/api/me/expenses") {
+        return handleGetMyExpenses(request, env);
+      }
+
+      // کاربران قابل مشاهده (خود، دوستان، هم‌گروهی‌ها): GET /api/me/contacts
+      if (request.method === "GET" && path === "/api/me/contacts") {
+        return handleGetContacts(request, env);
+      }
+
+      // ویرایش پروفایل خودِ کاربر: PUT /api/me
+      if (request.method === "PUT" && path === "/api/me") {
+        return handleUpdateMe(request, env);
+      }
+
+      // جست‌وجوی کاربران: GET /api/users/search?q=...
+      // ⚠️ باید قبل از الگوی /api/users/:userId بیاید، وگرنه "search" به‌عنوان
+      // userId تفسیر می‌شود.
+      if (request.method === "GET" && path === "/api/users/search") {
+        return handleSearchUsers(request, env);
       }
 
       // لیست هزینه‌های یک گروه: GET /api/groups/:groupId/expenses

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
 
 import '../../Services/Api.dart';
 import '../../Services/GoogleSignInService.dart';
+import '../../ViewModel/AppStateVM.dart';
 import '../Home/HomePage.dart';
 
 class SignUp extends StatefulWidget {
@@ -45,7 +47,12 @@ class _SignUpState extends State<SignUp> {
     }
   }
 
-  void _goHome() {
+  /// بعد از ورود/ثبت‌نام موفق باید AppStateVM هم خبردار شود، وگرنه
+  /// currentUser تهی می‌ماند و صفحه‌های داخلی «لطفاً ابتدا وارد شوید»
+  /// نشان می‌دهند.
+  Future<void> _goHome() async {
+    await context.read<AppStateVM>().onSignedIn();
+    if (!mounted) return;
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (_) => HomePage()),
@@ -193,7 +200,7 @@ class _SignUpState extends State<SignUp> {
                                     _name.trim(), _email.trim(), _password);
                                 if (ok && mounted) {
                                   _showSuccessSnackbar('ثبت نام با موفقیت انجام شد');
-                                  _goHome();
+                                  await _goHome();
                                 }
                               }
                             },
@@ -291,7 +298,7 @@ class _SignUpState extends State<SignUp> {
       await _api.loginWithGoogle(idToken);
       if (mounted) {
         _showSuccessSnackbar('ثبت نام با موفقیت انجام شد');
-        _goHome();
+        await _goHome();
       }
     } on ApiException catch (e) {
       if (mounted) _showErrorSnackbar(e.message);

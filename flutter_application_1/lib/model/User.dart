@@ -1,5 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart' as fb;
+import 'package:uuid/uuid.dart';
 
 class User {
   final String name;
@@ -19,37 +18,31 @@ class User {
     List<String>? friendIds,
   }) : friendIds = friendIds ?? [];
 
-  /// تبدیل از Firebase User به مدل شما
-  factory User.fromFirebaseUser(fb.User user) {
-    return User(
-      id: user.uid,
-      name: user.displayName ?? 'کاربر',
-      email: user.email ?? '',
-      photoURL: user.photoURL,
-      accountNumber: null,
-      friendIds: [],
+  /// ساخت از JSON بک‌اند Cloudflare.
+  /// شکل پاسخ: { id, name, email, photoURL, accountNumber, friendIds? }
+  /// friendIds فقط برای خودِ کاربر برمی‌گردد؛ برای مخاطبین خالی است.
+  factory User.fromJson(Map<String, dynamic> json) {
+    String? nullIfEmpty(Object? value) {
+      final s = value as String?;
+      return (s == null || s.isEmpty) ? null : s;
+    }
 
+    return User(
+      id: (json['id'] ?? '') as String,
+      name: (json['name'] as String?)?.isNotEmpty == true
+          ? json['name'] as String
+          : 'کاربر',
+      email: (json['email'] ?? '') as String,
+      photoURL: nullIfEmpty(json['photoURL']),
+      accountNumber: nullIfEmpty(json['accountNumber']),
+      friendIds: (json['friendIds'] as List?)?.cast<String>() ?? const [],
     );
   }
 
-  /// تبدیل از Firestore Document
-  factory User.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    return User(
-      id: data['uid'],
-      name:  data['displayName'] ?? 'کاربر',
-      email: data['email'] ?? '',
-      photoURL: data['photoURL'],
-      accountNumber: data['accountNumber'],
-      friendIds: List<String>.from(data['friendIds'] ?? []),
-    );
-  }
-
-  /// تبدیل به Map برای Firestore
-   Map<String, dynamic> toFirestore() {
+  Map<String, dynamic> toJson() {
     return {
-      'uid': id,
-      'displayName': name,
+      'id': id,
+      'name': name,
       'email': email,
       'photoURL': photoURL,
       'accountNumber': accountNumber,
@@ -66,7 +59,7 @@ class User {
     String? accountNumber,
   }) {
     return User(
-      id: id ?? FirebaseFirestore.instance.collection('users').doc().id,
+      id: id ?? const Uuid().v4(),
       name: name,
       email: email,
       photoURL: photoURL,

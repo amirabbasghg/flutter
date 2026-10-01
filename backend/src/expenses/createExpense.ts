@@ -13,7 +13,7 @@ export async function handleCreateExpense(
   env: Env
 ): Promise<Response> {
   try {
-    // هویت از توکن JWT؛ پرداخت‌کننده باید همان کاربر واردشده باشد
+    // هویت از توکن JWT. فرستنده باید عضو گروه باشد (پایین‌تر چک می‌شود).
     const userId = await authenticate(request, env);
     if (userId instanceof Response) {
       return userId;
@@ -22,6 +22,7 @@ export async function handleCreateExpense(
     const body = await request.json<{
       id?: string;
       amount?: number;
+      paidById?: string;
       paidForIds?: string[];
       groupId?: string;
       dateTime?: string;
@@ -46,7 +47,11 @@ export async function handleCreateExpense(
       );
     }
 
-    const paidById = userId;
+    // اپ یک برنامه‌ی هزینه‌ی گروهی است: هر عضو می‌تواند ثبت کند که «علی شام را
+    // حساب کرد». پس paidById می‌تواند عضو دیگری باشد — اما فقط عضوی از همان
+    // گروه (پایین‌تر چک می‌شود) و فقط توسط کسی که خودش عضو گروه است.
+    // اگر فرستاده نشود، خودِ کاربر واردشده پرداخت‌کننده است.
+    const paidById = body.paidById ?? userId;
 
     if (body.amount <= 0) {
       return response(

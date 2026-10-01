@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../Services/Api.dart';
 import '../Services/TokenStore.dart';
 import '../ViewModel/AppStateVM.dart';
 import 'Home/HomePage.dart';
@@ -23,33 +22,21 @@ class _WrapperState extends State<Wrapper> {
     _readyFuture = _resolveSession();
   }
 
-  /// تعیین وضعیت ورود بر اساس TokenStore (بدون Firebase):
-  /// - نشست ذخیره‌شده باشد → یک بار getMyProfile زده می‌شود؛ اگر access token
-  ///   منقضی باشد، Api به‌صورت خودکار refresh می‌کند. موفق → کاربر وارد است.
-  /// - خطای ۴۰۱ قطعی یا SessionExpired → نشست پاک و صفحه ورود نشان داده می‌شود.
-  /// - خطای شبکه (سرور روشن نیست) → وضعیت نشست حفظ می‌شود تا کاربر مجبور به
-  ///   ورود مجدد نشود؛ درخواست‌های بعدی دوباره تلاش خواهند کرد.
+  /// تعیین وضعیت ورود بر اساس TokenStore (بدون Firebase).
+  ///
+  /// کل کار به AppStateVM.onSignedIn سپرده می‌شود تا دقیقاً همان مسیری طی شود
+  /// که بعد از ورود دستی طی می‌شود: اول currentUser از TokenStore ساخته
+  /// می‌شود، بعد پروفایل از سرور تازه می‌گردد و فقط در صورت ۴۰۱/۴۰۳ نشست
+  /// پاک می‌شود.
+  ///
+  /// قبلاً اینجا در خطای شبکه/۵xx مقدار true برگردانده می‌شد ولی currentUser
+  /// پر نمی‌شد، و نتیجه‌اش صفحه‌ی اصلی با پیام «لطفاً ابتدا وارد شوید» بود.
   Future<bool> _resolveSession() async {
     if (!TokenStore.hasSession) return false;
-    try {
-      await ApiService.instance.getMyProfile();
-      final appState = Provider.of<AppStateVM>(context, listen: false);
-      await appState.refreshCurrentUser();
-      return true;
-    } on SessionExpiredException {
-      await TokenStore.clear();
-      return false;
-    } on ApiException catch (e) {
-      if (e.statusCode == 401 || e.statusCode == 403) {
-        await TokenStore.clear();
-        return false;
-      }
-      // 5xx یا خطای دیگر: نشست را از دست نده
-      return true;
-    } catch (_) {
-      // خطای شبکه یا هر چیز دیگر: نشست حفظ شود
-      return true;
-    }
+    final appState = Provider.of<AppStateVM>(context, listen: false);
+    await appState.onSignedIn();
+    // onSignedIn در صورت ۴۰۱/۴۰۳ نشست را پاک کرده است.
+    return TokenStore.hasSession && appState.currentUser != null;
   }
 
   @override

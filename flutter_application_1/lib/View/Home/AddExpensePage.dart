@@ -10,6 +10,7 @@ import 'package:namer_app/model/Group.dart';
 import 'package:namer_app/model/Expense.dart';
 import 'package:namer_app/model/WordPairModel.dart';
 import 'package:namer_app/model/User.dart';
+import '../../Services/Api.dart';
 import '../../ViewModel/AppStateVM.dart';
 import '../../model/ExpenseManager.dart';
 import 'package:persian_number_utility/persian_number_utility.dart';
@@ -733,7 +734,7 @@ class _AddExpensePageState extends State<AddExpensePage> {
     return SizedBox();
   }
 
-  void _addExpense(AppStateVM appStateVM) {
+  Future<void> _addExpense(AppStateVM appStateVM) async {
     if (_formKey.currentState!.validate()) {
       if (_selectedGroup == null || _selectedPayer == null || _selectedReceivers.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -788,7 +789,22 @@ class _AddExpensePageState extends State<AddExpensePage> {
         description: _descriptionController.text,
       );
 
-      appStateVM.addExpenseToGroup(_selectedGroup!, expense);
+      // ثبت روی سرور (Cloudflare D1). قبلاً Firestore بود و خطا را قورت می‌داد؛
+      // حالا اگر سرور قبول نکند باید به کاربر گفته شود و فرم پاک نشود.
+      try {
+        await appStateVM.addExpenseToGroup(_selectedGroup!, expense);
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e is ApiException ? e.message : 'ثبت هزینه انجام نشد'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      if (!mounted) return;
 
       // نمایش خلاصه
       _showExpenseSummary(expense, appStateVM.members);

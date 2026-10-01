@@ -25,6 +25,7 @@ export async function handleUpdateExpense(
 
     const body = await request.json<{
       amount?: number;
+      paidById?: string;
       paidForIds?: string[];
       groupId?: string;
       dateTime?: string;
@@ -64,8 +65,9 @@ export async function handleUpdateExpense(
 
     // مقادیر جدید یا مقادیر فعلی
     const amount = body.amount ?? existingExpense.amount;
-    // پرداخت‌کننده قابل تغییر نیست (بدن درخواست دیگر paidById نمی‌فرستد)
-    const paidById = existingExpense.paid_by_id;
+    // پرداخت‌کننده قابل تغییر است (مثل createExpense)، ولی باید عضو همان
+    // گروه باشد — همان چکی که پایین‌تر روی memberIds انجام می‌شود.
+    const paidById = body.paidById ?? existingExpense.paid_by_id;
     const groupId = body.groupId ?? existingExpense.group_id;
     const dateTime = body.dateTime ?? existingExpense.date_time;
     const description =

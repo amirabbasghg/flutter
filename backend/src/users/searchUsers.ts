@@ -21,34 +21,33 @@ export async function handleSearchUsers(
 
   const pattern = `%${query}%`;
 
+  // جست‌وجو فقط روی نام نمایشی. ایمیل عمداً جست‌وجو نمی‌شود: با آن می‌شد
+  // وجود یک ایمیل مشخص در سیستم را تأیید کرد.
   const users = await env.expense_app_db
     .prepare(`
-      SELECT id, name, email, photo_url, account_number
+      SELECT id, name, photo_url
       FROM users
       WHERE id != ?
-        AND (
-          name LIKE ? COLLATE NOCASE
-          OR email LIKE ? COLLATE NOCASE
-        )
+        AND name LIKE ? COLLATE NOCASE
       ORDER BY name COLLATE NOCASE
       LIMIT 20
     `)
-    .bind(authenticatedUserId, pattern, pattern)
+    .bind(authenticatedUserId, pattern)
     .all<{
       id: string;
       name: string;
-      email: string | null;
       photo_url: string | null;
-      account_number: string | null;
     }>();
 
+  // ایمیل و شماره کارت در نتیجه‌ی جست‌وجو برنمی‌گردند — این‌ها فقط برای
+  // دوستان و هم‌گروهی‌ها (/api/me/contacts) در دسترس‌اند.
   return response(
     users.results.map((user) => ({
       id: user.id,
       name: user.name,
-      email: user.email ?? "",
+      email: "",
       photoURL: user.photo_url,
-      accountNumber: user.account_number,
+      accountNumber: null,
     })),
   );
 }

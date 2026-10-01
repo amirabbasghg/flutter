@@ -1045,7 +1045,7 @@ class _ExpenseHistoryPageState extends State<ExpenseHistoryPage> {
   }
 
 // متد حذف هزینه
-  void _deleteExpense(Expense expense, AppStateVM appState) {
+  Future<void> _deleteExpense(Expense expense, AppStateVM appState) async {
     try {
       // پیدا کردن گروه مربوطه
       final group = appState.groups.firstWhere(
@@ -1053,8 +1053,11 @@ class _ExpenseHistoryPageState extends State<ExpenseHistoryPage> {
         orElse: () => Group.create(name: 'نامشخص', memberIds: [], createdBy: appState.currentUser!.id),
       );
 
-      // حذف هزینه از گروه
-      appState.removeExpenseFromGroup(group, expense);
+      // حذف هزینه از گروه (روی سرور). بدون await، خطای سرور هرگز به این
+      // try/catch نمی‌رسید و پیام موفقیت الکی نشان داده می‌شد.
+      await appState.removeExpenseFromGroup(group, expense);
+
+      if (!mounted) return;
 
       // نمایش پیام موفقیت
       ScaffoldMessenger.of(context).showSnackBar(

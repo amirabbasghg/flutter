@@ -1,4 +1,6 @@
 // view/friends_page.dart
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:iranian_banks/iranian_banks.dart';
@@ -20,10 +22,57 @@ class _FriendsPageState extends State<FriendsPage> {
   String _searchQuery = '';
   int _selectedTab = 0;
 
+  // تب «پیدا کردن» سمت سرور جست‌وجو می‌کند. در نسخه‌ی Firestore کل جدول users
+  // روی گوشی بود و فیلتر کردنش محلی انجام می‌شد؛ با D1 دیگر چنین لیستی نداریم.
+  List<User> _searchResults = const [];
+  bool _isSearching = false;
+  Timer? _searchDebounce;
+  int _searchSeq = 0;
+
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    setState(() => _searchQuery = value);
+    _searchDebounce?.cancel();
+
+    final query = value.trim();
+    if (query.length < 2) {
+      setState(() {
+        _searchResults = const [];
+        _isSearching = false;
+      });
+      return;
+    }
+
+    // یک تأخیر کوتاه تا با هر حرف یک درخواست به سرور نرود
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      _runSearch(query);
+    });
+  }
+
+  Future<void> _runSearch(String query) async {
+    final seq = ++_searchSeq;
+    setState(() => _isSearching = true);
+    try {
+      final results =
+          await context.read<AppStateVM>().searchUsers(query);
+      if (!mounted || seq != _searchSeq) return; // نتیجه‌ی قدیمی را نشان نده
+      setState(() {
+        _searchResults = results;
+        _isSearching = false;
+      });
+    } catch (_) {
+      if (!mounted || seq != _searchSeq) return;
+      setState(() {
+        _searchResults = const [];
+        _isSearching = false;
+      });
+    }
   }
 
   @override
@@ -51,18 +100,16 @@ class _FriendsPageState extends State<FriendsPage> {
       );
     }
 
-    final filteredMembers = _searchQuery.isEmpty
-        ? appStateVM.members
-        : appStateVM.members.where((user) =>
-    user.name.toLowerCase().contains(_searchQuery.toLowerCase()) &&
-        user.id != currentUser.id).toList();
+    // «دوستان من» از مخاطبین محلی می‌آید؛ «پیدا کردن» از نتیجه‌ی جست‌وجوی سرور.
+    final friends = appStateVM.members
+        .where((user) => currentUser.friendIds.contains(user.id))
+        .toList();
 
-    final friends = appStateVM.members.where((user) =>
-        currentUser.friendIds.contains(user.id)).toList();
-
-    final nonFriends = filteredMembers.where((user) =>
-    user.id != currentUser.id &&
-        !currentUser.friendIds.contains(user.id)).toList();
+    final nonFriends = _searchResults
+        .where((user) =>
+            user.id != currentUser.id &&
+            !currentUser.friendIds.contains(user.id))
+        .toList();
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -110,13 +157,19 @@ class _FriendsPageState extends State<FriendsPage> {
                                 icon: Icon(Icons.close, color: Colors.white70),
                                 onPressed: () {
                                   _searchController.clear();
-                                  setState(() => _searchQuery = '');
+                                  _searchDebounce?.cancel();
+                                  _searchSeq++; // نتیجه‌ی در راه را بی‌اعتبار کن
+                                  setState(() {
+                                    _searchQuery = '';
+                                    _searchResults = const [];
+                                    _isSearching = false;
+                                  });
                                 },
                               )
                                   : null,
                             ),
                             style: TextStyle(color: Colors.white),
-                            onChanged: (value) => setState(() => _searchQuery = value),
+                            onChanged: _onSearchChanged,
                           ),
                         ),
                       ),
@@ -173,14 +226,16 @@ class _FriendsPageState extends State<FriendsPage> {
                     ),
                   ),
 
-                  // Tab 1: Search
-                  _searchQuery.isEmpty
+                  // Tab 1: Search (سمت سرور)
+                  _searchQuery.trim().length < 2
                       ? _buildEmptyState(
                     Iconsax.search_status,
                     'دوستان جدید پیدا کنید',
-                    'نام دوست خود را جستجو کنید',
+                    'حداقل ۲ حرف از نام دوستتان را بنویسید',
                     theme,
                   )
+                      : _isSearching
+                      ? const Center(child: CircularProgressIndicator())
                       : nonFriends.isEmpty
                       ? _buildEmptyState(
                     Iconsax.search_status,

@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
 import 'package:namer_app/Services/ApiConfig.dart';
 import 'package:namer_app/Services/TokenStore.dart';
@@ -51,18 +52,29 @@ class ApiService {
     return headers;
   }
 
-  Map<String, dynamic>? _decode(http.Response res) {
-    if (res.body.isEmpty) return null;
+  /// بدنه‌ی پاسخ را همان‌طور که هست برمی‌گرداند: Map، List یا null.
+  ///
+  /// ⚠️ این متد قبلاً فقط Map را قبول می‌کرد و برای هر پاسخ دیگری null
+  /// برمی‌گرداند. چون مسیرهای لیستی سرور (/me/groups، /me/expenses،
+  /// /me/contacts، /users/search، /users/:id/friends) آرایه‌ی JSON در سطح
+  /// بالا برمی‌گردانند، همه‌ی آن‌ها بی‌صدا «لیست خالی» می‌شدند — بدون هیچ خطایی.
+  @visibleForTesting
+  static dynamic decodeBody(http.Response res) {
+    if (res.bodyBytes.isEmpty) return null;
     try {
-      final decoded = jsonDecode(utf8.decode(res.bodyBytes));
-      return decoded is Map<String, dynamic> ? decoded : null;
+      return jsonDecode(utf8.decode(res.bodyBytes));
     } catch (_) {
       return null;
     }
   }
 
-  String _errorMessage(Map<String, dynamic>? data, http.Response res) {
-    final msg = data?['error'] ?? data?['message'];
+  /// فقط برای خواندن فیلدهای خطا — پاسخ خطای سرور همیشه آبجکت است.
+  static Map<String, dynamic>? _asMap(dynamic data) =>
+      data is Map<String, dynamic> ? data : null;
+
+  String _errorMessage(dynamic data, http.Response res) {
+    final map = _asMap(data);
+    final msg = map?['error'] ?? map?['message'];
     if (msg is String && msg.isNotEmpty) return msg;
     return 'خطای سرور (${res.statusCode})';
   }
@@ -79,7 +91,7 @@ class ApiService {
         headers: _jsonHeaders,
         body: jsonEncode({'refreshToken': refreshToken}),
       );
-      final data = _decode(res);
+      final data = _asMap(decodeBody(res));
       if (res.statusCode == 200 &&
           data != null &&
           data['accessToken'] is String) {
@@ -190,7 +202,7 @@ class ApiService {
   }
 
   dynamic _handle(http.Response res) {
-    final data = _decode(res);
+    final data = decodeBody(res);
     if (res.statusCode >= 200 && res.statusCode < 300) {
       return data;
     }
@@ -221,7 +233,7 @@ class ApiService {
     final res = await _client.get(
       ApiConfig.uri('/display-names/check?name=${Uri.encodeQueryComponent(name)}'),
     );
-    final data = _decode(res);
+    final data = _asMap(decodeBody(res));
     if (res.statusCode == 200 && data != null) {
       return data['available'] == true;
     }
@@ -306,7 +318,7 @@ class ApiService {
     }
   }
 
-  // ===== Users / Groups / Expenses =====
+  // ===== Profile =====
 
   Future<Map<String, dynamic>> getMyProfile() async {
     final id = TokenStore.userId;
@@ -314,20 +326,125 @@ class ApiService {
     return await get('/users/$id') as Map<String, dynamic>;
   }
 
-  Future<List<dynamic>> getMyGroups() async {
-    final data = await get('/me/groups');
-    if (data is List) return data;
-    if (data is Map<String, dynamic> && data['groups'] is List) {
-      return data['groups'] as List<dynamic>;
-    }
-    return const [];
+  /// ویرایش پروفایل خودِ کاربر. فقط فیلدهای غیر null فرستاده می‌شوند.
+  /// برای پاک کردن شماره کارت، رشته‌ی خالی بفرستید.
+  Future<Map<String, dynamic>> updateMyProfile({
+    String? name,
+    String? photoURL,
+    String? accountNumber,
+  }) async {
+    final body = <String, dynamic>{};
+    if (name != null) body['name'] = name;
+    if (photoURL != null) body['photoURL'] = photoURL;
+    if (accountNumber != null) body['accountNumber'] = accountNumber;
+    if (body.isEmpty) return await getMyProfile();
+    return await put('/me', body) as Map<String, dynamic>;
   }
 
-  Future<List<dynamic>> getGroupExpenses(String groupId) async {
-    final data = await get('/groups/$groupId/expenses');
+  // ===== Bootstrap =====
+
+  /// همه‌ی داده‌های اولیه در یک درخواست:
+  /// { user, contacts[], groups[], expenses[] }
+  Future<Map<String, dynamic>> bootstrap() async {
+    return await get('/me/bootstrap') as Map<String, dynamic>;
+  }
+
+  // ===== Users / Contacts =====
+
+  /// کاربرانی که برای این حساب قابل مشاهده‌اند: خودش، دوستان و هم‌گروهی‌ها.
+  Future<List<dynamic>> getContacts() async => _asList(await get('/me/contacts'));
+
+  /// جست‌وجوی کاربران بر اساس نام نمایشی (حداقل ۲ نویسه).
+  /// نتیجه فقط id/name/photoURL دارد — ایمیل و شماره کارت برنمی‌گردند.
+  Future<List<dynamic>> searchUsers(String query) async {
+    final q = query.trim();
+    if (q.length < 2) return const [];
+    return _asList(await get('/users/search?q=${Uri.encodeQueryComponent(q)}'));
+  }
+
+  // ===== Friends =====
+
+  Future<List<dynamic>> getFriends() async {
+    final id = TokenStore.userId;
+    if (id == null) throw SessionExpiredException('کاربر وارد نشده است');
+    return _asList(await get('/users/$id/friends'));
+  }
+
+  Future<void> addFriend(String friendId) async {
+    final id = TokenStore.userId;
+    if (id == null) throw SessionExpiredException('کاربر وارد نشده است');
+    await post('/users/$id/friends', {'friendId': friendId});
+  }
+
+  Future<void> removeFriend(String friendId) async {
+    final id = TokenStore.userId;
+    if (id == null) throw SessionExpiredException('کاربر وارد نشده است');
+    await delete('/users/$id/friends/$friendId');
+  }
+
+  // ===== Groups =====
+
+  Future<List<dynamic>> getMyGroups() async => _asList(await get('/me/groups'));
+
+  Future<Map<String, dynamic>> createGroup({
+    required String id,
+    required String name,
+    required List<String> memberIds,
+  }) async {
+    return await post('/groups', {
+      'id': id,
+      'name': name,
+      'memberIds': memberIds,
+    }) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> updateGroup({
+    required String groupId,
+    String? name,
+    List<String>? memberIds,
+  }) async {
+    final body = <String, dynamic>{};
+    if (name != null) body['name'] = name;
+    if (memberIds != null) body['memberIds'] = memberIds;
+    return await put('/groups/$groupId', body) as Map<String, dynamic>;
+  }
+
+  Future<void> deleteGroup(String groupId) async {
+    await delete('/groups/$groupId');
+  }
+
+  // ===== Expenses =====
+
+  Future<List<dynamic>> getMyExpenses() async =>
+      _asList(await get('/me/expenses'));
+
+  Future<List<dynamic>> getGroupExpenses(String groupId) async =>
+      _asList(await get('/groups/$groupId/expenses'));
+
+  /// ثبت هزینه. سرور paidById را از توکن می‌گیرد، پس پرداخت‌کننده همیشه
+  /// خودِ کاربر واردشده است.
+  Future<Map<String, dynamic>> createExpense(Map<String, dynamic> body) async {
+    return await post('/expenses', body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> updateExpense(
+    String expenseId,
+    Map<String, dynamic> body,
+  ) async {
+    return await put('/expenses/$expenseId', body) as Map<String, dynamic>;
+  }
+
+  Future<void> deleteExpense(String expenseId) async {
+    await delete('/expenses/$expenseId');
+  }
+
+  /// سرور هم آرایه‌ی خالی برمی‌گرداند و هم (در بعضی مسیرها) آبجکت با کلید.
+  List<dynamic> _asList(dynamic data) {
     if (data is List) return data;
-    if (data is Map<String, dynamic> && data['expenses'] is List) {
-      return data['expenses'] as List<dynamic>;
+    if (data is Map<String, dynamic>) {
+      for (final key in const ['groups', 'expenses', 'users', 'friends', 'contacts']) {
+        if (data[key] is List) return data[key] as List<dynamic>;
+      }
     }
     return const [];
   }

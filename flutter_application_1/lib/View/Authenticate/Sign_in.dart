@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
 
 import '../../Services/Api.dart';
 import '../../Services/GoogleSignInService.dart';
+import '../../ViewModel/AppStateVM.dart';
 import 'Sign_up.dart';
 import '../Home/HomePage.dart';
 
@@ -42,16 +44,24 @@ class _SignInState extends State<SignIn> {
     }
   }
 
+  /// بعد از هر ورود موفق باید AppStateVM هم خبردار شود، وگرنه currentUser
+  /// تهی می‌ماند و صفحه‌های داخلی «لطفاً ابتدا وارد شوید» نشان می‌دهند.
+  Future<void> _enterApp() async {
+    await context.read<AppStateVM>().onSignedIn();
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => HomePage()),
+    );
+  }
+
   Future<void> _handleGoogleIdToken(String idToken) async {
     setState(() => _loading = true);
     try {
       await _api.loginWithGoogle(idToken);
       if (mounted) {
         _showSuccessSnackbar('ورود با گوگل انجام شد');
-        Navigator.pushReplacement(
-                                  context,
-                                  MaterialPageRoute(builder: (_) => HomePage()),
-                                );
+        await _enterApp();
       }
     } on ApiException catch (e) {
       if (mounted) _showErrorSnackbar(e.message);
@@ -261,10 +271,7 @@ class _SignInState extends State<SignIn> {
                                 final ok = await _apiLogin(_email, _password);
                                 if (ok && mounted) {
                                   _showSuccessSnackbar('ورود با موفقیت انجام شد');
-                                  Navigator.pushReplacement(
-                                  context,
-                                  MaterialPageRoute(builder: (_) => HomePage()),
-                                );
+                                  await _enterApp();
                                 }
                               }
                             },
@@ -378,7 +385,7 @@ class _SignInState extends State<SignIn> {
         _showErrorSnackbar('توکن گوگل دریافت نشد');
         return;
       }
-      await _handleGoogleIdToken(idToken!);
+      await _handleGoogleIdToken(idToken);
     } catch (e) {
       if (mounted) _showErrorSnackbar('ورود انجام نشد');
     }

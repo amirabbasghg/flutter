@@ -9,6 +9,7 @@ import 'package:flutter_persian_calendar/flutter_persian_calendar.dart'; // اض
 import 'package:namer_app/model/Group.dart';
 import 'package:namer_app/model/Expense.dart';
 import 'package:namer_app/model/User.dart';
+import '../../Services/Api.dart';
 import '../../ViewModel/AppStateVM.dart';
 
 // enum برای انواع فیلتر تاریخ
@@ -1818,16 +1819,17 @@ class _SettlementPageState extends State<SettlementPage> {
   }
 
 // متد اضافه کردن expense
-  void _addExpense(
+  Future<void> _addExpense(
       User selectedUserPaidBy,
       User selectedUserPaidFor,
       Group selectedGroup,
       String description,
       String amount,
       BuildContext context
-      ) {
+      ) async {
     final totalAmount = double.parse(amount.replaceAll(',', ''));
     final appStateVM = context.read<AppStateVM>();
+    final messenger = ScaffoldMessenger.of(context);
 
     final expense = appStateVM.createExpense(
       amount: totalAmount,
@@ -1838,7 +1840,17 @@ class _SettlementPageState extends State<SettlementPage> {
       description: description.isNotEmpty ? description : 'پرداخت دستی',
     );
 
-    appStateVM.addExpenseToGroup(selectedGroup, expense);
+    // ثبت روی سرور؛ اگر رد شد کاربر باید بفهمد (قبلاً با Firestore بی‌صدا بود)
+    try {
+      await appStateVM.addExpenseToGroup(selectedGroup, expense);
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(e is ApiException ? e.message : 'ثبت تسویه انجام نشد'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
 // محاسبه پیشنهادات تسویه

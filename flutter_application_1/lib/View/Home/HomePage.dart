@@ -2,7 +2,6 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
-import 'package:namer_app/Services/Api.dart';
 import 'package:namer_app/Services/GoogleSignInService.dart';
 import 'package:namer_app/View/Authenticate/Authenticate.dart';
 import 'package:namer_app/View/Home/GroupPage.dart';
@@ -92,14 +91,18 @@ class HomePage extends StatelessWidget {
                                   width: double.infinity,
                                   child: ElevatedButton.icon(
                                       onPressed: () async {
-                                          // خروج از بک‌اند جدید (ابطال refresh token و پاک کردن نشست محلی)
-                                          try {
-                                            await ApiService.instance.logout();
-                                          } catch (_) {}
-                                          // تا زمانی که فایربیس کاملاً حذف نشده، signOut قدیمی هم زده شود
+                                          // خروج: ابطال refresh token روی سرور،
+                                          // پاک کردن نشست محلی و خالی کردن
+                                          // داده‌های کش‌شده در AppStateVM — وگرنه
+                                          // گروه‌ها و هزینه‌های کاربر قبلی برای
+                                          // کاربر بعدی نشان داده می‌شوند.
+                                          await appStateVM.logout();
+                                          // sign-out محلی حساب گوگل تا دفعه‌ی
+                                          // بعد انتخابگر حساب نشان داده شود
                                           try {
                                             await GoogleSignInService.signOut();
                                           } catch (_) {}
+                                          if (!context.mounted) return;
                                           Navigator.pushAndRemoveUntil(
                                             context,
                                             MaterialPageRoute(builder: (_) => Authenticate()),
@@ -139,7 +142,7 @@ class HomePage extends StatelessWidget {
                         child: Row(
                           children: [
                             IconButton(
-                                onPressed: appStateVM.refreshCurrentUser,
+                                onPressed: appStateVM.reload,
                                 icon: Icon(Icons.refresh, color: Colors.white),
                                 // style: IconButton.styleFrom(
                                 //     backgroundColor: Colors.white,
