@@ -19,12 +19,24 @@ type GoogleIdTokenPayload = {
   picture?: string;
 };
 
+// هر پلتفرم OAuth client خودش را دارد و `aud` توکن همان است، پس بیش از یک
+// مقدار مجاز داریم: اندروید با client پروژه‌ی 277889096548 و وب با client
+// پروژه‌ی 177838948520. GOOGLE_CLIENT_ID می‌تواند چند شناسه‌ی جداشده با ویرگول
+// باشد؛ یک شناسه‌ی تنها هم مثل قبل کار می‌کند.
+function allowedAudiences(env: Env): string[] {
+  return (env.GOOGLE_CLIENT_ID ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter((id) => id.length > 0);
+}
+
 // اعتبارسنجی کامل id_token: امضا با JWKS گوگل + issuer + audience + زمان.
 async function verifyGoogleIdToken(
   idToken: string,
   env: Env,
 ): Promise<GoogleIdTokenPayload | null> {
-  if (!env.GOOGLE_CLIENT_ID) {
+  const audiences = allowedAudiences(env);
+  if (audiences.length === 0) {
     throw new Error(
       "GOOGLE_CLIENT_ID is not set. Add it to wrangler.jsonc vars or .dev.vars.",
     );
@@ -32,7 +44,8 @@ async function verifyGoogleIdToken(
   try {
     const { payload } = await jwtVerify(idToken, GOOGLE_JWKS, {
       issuer: ["https://accounts.google.com", "accounts.google.com"],
-      audience: env.GOOGLE_CLIENT_ID,
+      // jose قبول می‌کند که `aud` توکن با هر کدام از این‌ها برابر باشد.
+      audience: audiences,
       algorithms: ["RS256"],
     });
     if (typeof payload.sub !== "string" || !payload.sub) return null;

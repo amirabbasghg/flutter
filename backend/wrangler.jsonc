@@ -11,11 +11,15 @@
 
   "upload_source_maps": true,
 
-  // GOOGLE_CLIENT_ID = شناسه‌ی «Web client (type 3)» از google-services.json.
-  // audience داخل id_token گوگل دقیقاً همین است و src/auth/google.ts بدون آن
-  // خطای ۵۰۰ می‌دهد. مقدار محرمانه نیست، پس می‌تواند در همین فایل بماند.
+  // شناسه‌های OAuth مجاز، جداشده با ویرگول. `aud` داخل id_token گوگل باید با
+  // یکی از این‌ها برابر باشد، وگرنه ورکر توکن را رد می‌کند.
+  //   ۱) 277889096548-... → Web client (type 3) از google-services.json؛
+  //      اندروید این را به‌عنوان serverClientId می‌فرستد.
+  //   ۲) 177838948520-... → client جداگانه‌ی سایت expense-app (پروژه‌ی گوگلِ
+  //      دیگری است، برای همین شماره‌اش فرق دارد).
+  // هیچ‌کدام محرمانه نیستند، پس می‌توانند در همین فایل بمانند.
   "vars": {
-    "GOOGLE_CLIENT_ID": "277889096548-56031v6p9lomnmifk7brqhm09733mpai.apps.googleusercontent.com",
+    "GOOGLE_CLIENT_ID": "277889096548-56031v6p9lomnmifk7brqhm09733mpai.apps.googleusercontent.com,177838948520-boe8qvmh1qcludvfcjdqhcm4fb8opujm.apps.googleusercontent.com",
     "ENVIRONMENT": "production"
   },
 
@@ -32,7 +36,7 @@
       "name": "backend-dev",
 
       "vars": {
-        "GOOGLE_CLIENT_ID": "277889096548-56031v6p9lomnmifk7brqhm09733mpai.apps.googleusercontent.com",
+        "GOOGLE_CLIENT_ID": "277889096548-56031v6p9lomnmifk7brqhm09733mpai.apps.googleusercontent.com,177838948520-boe8qvmh1qcludvfcjdqhcm4fb8opujm.apps.googleusercontent.com",
         "ENVIRONMENT": "development"
       },
 

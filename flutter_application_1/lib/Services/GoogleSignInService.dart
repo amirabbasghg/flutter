@@ -17,14 +17,20 @@ import 'GoogleWebButton.dart';
 ///     رندر شود (`webButton()`) و نتیجه از استریم [authenticationEvents]
 ///     بیاید.
 class GoogleSignInService {
-  /// همان «Web client (type 3)» در google-services.json.
-  /// مقدار `aud` داخل id_token دقیقاً همین است و باید با GOOGLE_CLIENT_ID
-  /// در backend/wrangler.jsonc یکی باشد، وگرنه ورکر توکن را رد می‌کند.
-  ///
-  /// روی وب همین مقدار به‌عنوان clientId می‌رود و روی موبایل به‌عنوان
-  /// serverClientId — پس توکنِ هر دو پلتفرم همان audience را دارد و بک‌اند
-  /// نیازی به تغییر ندارد.
+  // هر پلتفرم OAuth client خودش را دارد، چون سایت و اپ اندروید در دو پروژه‌ی
+  // جداگانه‌ی Google Cloud ثبت شده‌اند. مقدار `aud` داخل id_token همین شناسه
+  // است، پس هر دو باید در GOOGLE_CLIENT_ID در backend/wrangler.jsonc باشند
+  // (آنجا با ویرگول از هم جدا می‌شوند).
+
+  /// client مخصوص سایت expense-app (پروژه‌ی 177838948520).
+  /// دامنه‌ی سایت باید در Authorized JavaScript origins همین client ثبت شده
+  /// باشد، وگرنه گوگل دکمه را رندر نمی‌کند.
   static const String webClientId =
+      '177838948520-boe8qvmh1qcludvfcjdqhcm4fb8opujm.apps.googleusercontent.com';
+
+  /// همان «Web client (type 3)» در google-services.json (پروژه‌ی 277889096548).
+  /// روی اندروید به‌عنوان serverClientId می‌رود تا توکن برای بک‌اند صادر شود.
+  static const String androidServerClientId =
       '277889096548-56031v6p9lomnmifk7brqhm09733mpai.apps.googleusercontent.com';
 
   static final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
@@ -37,7 +43,7 @@ class GoogleSignInService {
       // و در عوض clientId لازم دارد.
       await _googleSignIn.initialize(clientId: webClientId);
     } else {
-      await _googleSignIn.initialize(serverClientId: webClientId);
+      await _googleSignIn.initialize(serverClientId: androidServerClientId);
     }
     _isInitialized = true;
   }
