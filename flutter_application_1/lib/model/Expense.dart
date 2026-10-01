@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
@@ -79,32 +78,57 @@ class Expense {
   //   );
   // }
 
-  factory Expense.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+  /// ساخت از JSON بک‌اند. customSplits به شکل { userId: amount } می‌آید.
+  factory Expense.fromJson(Map<String, dynamic> json) {
+    final rawSplits = json['customSplits'];
+    final splits = <String, double>{};
+    if (rawSplits is Map) {
+      rawSplits.forEach((key, value) {
+        if (key is String && value is num) splits[key] = value.toDouble();
+      });
+    } else if (rawSplits is List) {
+      // سرور در پاسخ POST/PUT آرایه‌ی [{userId, amount}] برمی‌گرداند
+      for (final item in rawSplits) {
+        if (item is Map &&
+            item['userId'] is String &&
+            item['amount'] is num) {
+          splits[item['userId'] as String] = (item['amount'] as num).toDouble();
+        }
+      }
+    }
+
     return Expense(
-      id: doc.id,
-      amount: (data['amount'] as num).toDouble(),
-      paidById: data['paidById'] ?? '',
-      paidForIds: List<String>.from(data['paidForIds'] ?? []),
-      groupId: data['groupId'] ?? '',
-      dateTime: (data['dateTime'] as Timestamp).toDate(),
-      description: data['description'] ?? '',
-      isEqualSplit: data['isEqualSplit'] ?? true,
-      customSplits: Map<String, double>.from(data['customSplits'] ?? {}),
+      id: (json['id'] ?? '') as String,
+      amount: ((json['amount'] ?? 0) as num).toDouble(),
+      paidById: (json['paidById'] ?? '') as String,
+      paidForIds: (json['paidForIds'] as List?)?.cast<String>().toList() ?? [],
+      groupId: (json['groupId'] ?? '') as String,
+      dateTime:
+          DateTime.tryParse((json['dateTime'] ?? '') as String)?.toLocal() ??
+              DateTime.now(),
+      description: (json['description'] ?? '') as String,
+      isEqualSplit: json['isEqualSplit'] as bool? ?? true,
+      customSplits: splits,
     );
   }
 
-  Map<String, dynamic> toFirestore() {
+  /// بدنه‌ی POST /api/expenses و PUT /api/expenses/:id.
+  /// سرور paidById را از توکن می‌گیرد، پس فرستادنش لازم نیست.
+  /// customSplits در ورودیِ سرور آرایه است، نه map.
+  Map<String, dynamic> toJson() {
     return {
+      'id': id,
       'amount': amount,
-      'paidById': paidById,
       'paidForIds': paidForIds,
       'groupId': groupId,
-      'dateTime': Timestamp.fromDate(dateTime),
+      'dateTime': dateTime.toUtc().toIso8601String(),
       'description': description,
       'isEqualSplit': isEqualSplit,
-      'customSplits': customSplits,
-      'updatedAt': FieldValue.serverTimestamp(),
+      'customSplits': isEqualSplit
+          ? const []
+          : customSplits.entries
+              .map((e) => {'userId': e.key, 'amount': e.value})
+              .toList(),
     };
   }
 

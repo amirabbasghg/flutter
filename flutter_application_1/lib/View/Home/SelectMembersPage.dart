@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:money2/money2.dart';
 import 'package:provider/provider.dart';
 import '../../model/User.dart';
+import '../../Services/Api.dart';
 import '../../ViewModel/AppStateVM.dart';
 
 class SelectMembersPage extends StatefulWidget {
@@ -268,20 +269,37 @@ class _SelectMembersPageState extends State<SelectMembersPage> {
     );
   }
 
-  void _createGroup(BuildContext context, AppStateVM appStateVM , User user) {
+  Future<void> _createGroup(
+      BuildContext context, AppStateVM appStateVM, User user) async {
     final name = _groupNameController.text.trim();
-    if (name.isNotEmpty && _selectedMembers.isNotEmpty) {
-      _selectedMembers.add(user);
-      appStateVM.addGroup(name, _selectedMembers);
-      Navigator.pop(context);
+    if (name.isEmpty || _selectedMembers.isEmpty) return;
 
+    _selectedMembers.add(user);
+    final memberCount = _selectedMembers.length;
+
+    // ساخت گروه روی سرور. تا موفق نشده نباید صفحه بسته شود یا پیام موفقیت
+    // نشان داده شود (قبلاً با Firestore هر دو بی‌قید انجام می‌شد).
+    try {
+      await appStateVM.addGroup(name, _selectedMembers);
+    } catch (e) {
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('گروه "$name" با ${_selectedMembers.length} عضو ایجاد شد!'),
-          backgroundColor: Colors.green,
+          content: Text(e is ApiException ? e.message : 'ساخت گروه انجام نشد'),
+          backgroundColor: Colors.red,
         ),
       );
+      return;
     }
+
+    if (!context.mounted) return;
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('گروه "$name" با $memberCount عضو ایجاد شد!'),
+        backgroundColor: Colors.green,
+      ),
+    );
   }
 
   // متد برای انتخاب یا عدم انتخاب همه

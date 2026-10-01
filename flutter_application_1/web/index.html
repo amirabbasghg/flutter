@@ -1,5 +1,13 @@
 <!DOCTYPE html>
-<html>
+<!--
+  ⚠️ روی <html> صفت dir="rtl" نگذارید.
+  راست‌به‌چپ بودن رابط را خودِ فلاتر با Directionality مدیریت می‌کند. اما
+  platform view ها (مثل دکمه‌ی رسمی ورود با گوگل) با position:absolute و بدون
+  left/right جای‌گذاری می‌شوند و به transform تکیه دارند؛ یعنی فرض می‌کنند مبدأ
+  استاتیک، لبه‌ی چپ است. با dir="rtl" مبدأ به لبه‌ی راست می‌پرد و دکمه به اندازه‌ی
+  (عرض صفحه − عرض دکمه) به راست پرت می‌شود و از کادر بیرون می‌افتد.
+-->
+<html lang="fa">
 <head>
   <!--
     If you are serving your web app in a path other than the root, change the
@@ -18,19 +26,31 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="description" content="تقسیم و مدیریت هزینه‌های گروهی بین دوستان">
+  <meta name="theme-color" content="#373737">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="flutter_application_1">
+  <meta name="apple-mobile-web-app-title" content="مدیریت هزینه‌ها">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>flutter_application_1</title>
+  <title>مدیریت هزینه‌ها</title>
   <link rel="manifest" href="manifest.json">
+
+  <style>
+    /* پس‌زمینه‌ی هم‌رنگ اپ تا موقع بارگذاری صفحه سفید نزند */
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background-color: #373737;
+    }
+  </style>
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>

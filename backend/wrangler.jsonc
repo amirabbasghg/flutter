@@ -11,6 +11,14 @@
 
   "upload_source_maps": true,
 
+  // GOOGLE_CLIENT_ID = شناسه‌ی «Web client (type 3)» از google-services.json.
+  // audience داخل id_token گوگل دقیقاً همین است و src/auth/google.ts بدون آن
+  // خطای ۵۰۰ می‌دهد. مقدار محرمانه نیست، پس می‌تواند در همین فایل بماند.
+  "vars": {
+    "GOOGLE_CLIENT_ID": "277889096548-56031v6p9lomnmifk7brqhm09733mpai.apps.googleusercontent.com",
+    "ENVIRONMENT": "production"
+  },
+
   "d1_databases": [
     {
       "binding": "expense_app_db",
@@ -22,6 +30,11 @@
   "env": {
     "dev": {
       "name": "backend-dev",
+
+      "vars": {
+        "GOOGLE_CLIENT_ID": "277889096548-56031v6p9lomnmifk7brqhm09733mpai.apps.googleusercontent.com",
+        "ENVIRONMENT": "development"
+      },
 
       "d1_databases": [
         {

@@ -2,7 +2,6 @@ plugins {
     id("com.android.application")
     id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin")
-    id("com.google.gms.google-services") // پلاگین Firebase
 }
 
 android {
@@ -36,15 +35,4 @@ android {
 
 flutter {
     source = "../.."
-}
-
-// 🔹 این بخش رو اضافه کن
-dependencies {
-    // Firebase BoM
-    implementation(platform("com.google.firebase:firebase-bom:34.2.0"))
-
-    // Firebase services
-    implementation("com.google.firebase:firebase-analytics")
-    implementation("com.google.firebase:firebase-auth")
-    implementation("com.google.firebase:firebase-firestore")
 }

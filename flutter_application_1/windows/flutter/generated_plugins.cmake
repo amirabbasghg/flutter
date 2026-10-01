@@ -3,10 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
-  cloud_firestore
   downloadsfolder
-  firebase_auth
-  firebase_core
   flutter_localization
   printing
   share_plus

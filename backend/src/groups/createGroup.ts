@@ -1,40 +1,35 @@
 import { Env } from "../types";
 import { response } from "../utils/response";
+import { authenticate } from "../auth/middleware";
 
 export async function handleCreateGroup(
   request: Request,
   env: Env
 ): Promise<Response> {
   try {
+    // هویت کاربر فقط از توکن JWT گرفته می‌شود؛ body دیگر نمی‌تواند
+    // خودش را جای کسی بزند.
+    const userId = await authenticate(request, env);
+    if (userId instanceof Response) {
+      return userId;
+    }
+
     const body = await request.json<{
       id?: string;
       name?: string;
-      createdBy?: string;
       memberIds?: string[];
     }>();
 
-    if (!body.id || !body.name || !body.createdBy) {
-      return response(
-        { error: "id, name and createdBy are required" },
-        400
-      );
+    if (!body.id || !body.name) {
+      return response({ error: "id and name are required" }, 400);
     }
 
-    const memberIds = body.memberIds ?? [];
+    const createdBy = userId;
+    const memberIds = [...new Set(body.memberIds ?? [])];
 
     // سازنده گروه باید عضو گروه باشد
-    if (!memberIds.includes(body.createdBy)) {
-      memberIds.push(body.createdBy);
-    }
-
-    // بررسی وجود سازنده
-    const creator = await env.expense_app_db
-      .prepare(`SELECT id FROM users WHERE id = ?`)
-      .bind(body.createdBy)
-      .first<{ id: string }>();
-
-    if (!creator) {
-      return response({ error: "Creator not found" }, 404);
+    if (!memberIds.includes(createdBy)) {
+      memberIds.push(createdBy);
     }
 
     // بررسی وجود تمام اعضا
@@ -85,7 +80,7 @@ export async function handleCreateGroup(
         .bind(
           body.id,
           body.name,
-          body.createdBy,
+          createdBy,
           now,
           now
         ),
@@ -109,7 +104,7 @@ export async function handleCreateGroup(
       {
         id: body.id,
         name: body.name,
-        createdBy: body.createdBy,
+        createdBy: createdBy,
         memberIds,
         expenseIds: [],
         createdAt: now,

@@ -1,5 +1,6 @@
 import { Env } from "../types";
 import { response } from "../utils/response";
+import { requireGroupMember, getExpenseGroupId } from "../auth/authorization";
 
 export async function handleDeleteExpense(
   request: Request,
@@ -7,18 +8,14 @@ export async function handleDeleteExpense(
   expenseId: string
 ): Promise<Response> {
   try {
-    // بررسی وجود Expense
-    const expense = await env.expense_app_db
-      .prepare(`
-        SELECT id
-        FROM expenses
-        WHERE id = ?
-      `)
-      .bind(expenseId)
-      .first<{ id: string }>();
-
-    if (!expense) {
+    // فقط اعضای گروه آن هزینه می‌توانند آن را حذف کنند
+    const groupId = await getExpenseGroupId(env, expenseId);
+    if (groupId === null) {
       return response({ error: "Expense not found" }, 404);
+    }
+    const authorized = await requireGroupMember(request, env, groupId);
+    if (authorized instanceof Response) {
+      return authorized;
     }
 
     // حذف Expense و اطلاعات وابسته

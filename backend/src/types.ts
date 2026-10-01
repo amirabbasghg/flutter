@@ -4,6 +4,8 @@ export interface Env {
   // vars (wrangler.jsonc)
   GOOGLE_CLIENT_ID: string;
   PBKDF2_ITERATIONS?: string;
+  // اگر "production" باشد، devResetToken در پاسخ forgot برگردانده نمی‌شود.
+  ENVIRONMENT?: string;
 
   // secrets (wrangler secret put / .dev.vars)
   JWT_SECRET: string;
@@ -17,3 +19,6 @@ export type UserRow = {
   photo_url: string | null;
   account_number: string | null;
 };
+
+// نتیجه‌ی authenticate(): یا userId و یا یک Response آماده (۴۰۱) برای برگرداندن.
+export type AuthResult = string | Response;

@@ -1,5 +1,7 @@
 import { Env } from "../types";
 import { response } from "../utils/response";
+import { isGroupMember } from "../auth/authorization";
+import { authenticate } from "../auth/middleware";
 
 type CustomSplit = {
   userId: string;
@@ -11,6 +13,12 @@ export async function handleCreateExpense(
   env: Env
 ): Promise<Response> {
   try {
+    // هویت از توکن JWT. فرستنده باید عضو گروه باشد (پایین‌تر چک می‌شود).
+    const userId = await authenticate(request, env);
+    if (userId instanceof Response) {
+      return userId;
+    }
+
     const body = await request.json<{
       id?: string;
       amount?: number;
@@ -26,7 +34,6 @@ export async function handleCreateExpense(
     if (
       !body.id ||
       body.amount === undefined ||
-      !body.paidById ||
       !body.groupId ||
       !body.dateTime ||
       body.description === undefined
@@ -34,11 +41,17 @@ export async function handleCreateExpense(
       return response(
         {
           error:
-            "id, amount, paidById, groupId, dateTime and description are required",
+            "id, amount, groupId, dateTime and description are required",
         },
         400
       );
     }
+
+    // اپ یک برنامه‌ی هزینه‌ی گروهی است: هر عضو می‌تواند ثبت کند که «علی شام را
+    // حساب کرد». پس paidById می‌تواند عضو دیگری باشد — اما فقط عضوی از همان
+    // گروه (پایین‌تر چک می‌شود) و فقط توسط کسی که خودش عضو گروه است.
+    // اگر فرستاده نشود، خودِ کاربر واردشده پرداخت‌کننده است.
+    const paidById = body.paidById ?? userId;
 
     if (body.amount <= 0) {
       return response(
@@ -72,8 +85,13 @@ export async function handleCreateExpense(
       return response({ error: "Group not found" }, 404);
     }
 
+    // فقط اعضای گروه می‌توانند در آن گروه هزینه ثبت کنند
+    if (!(await isGroupMember(env, userId, body.groupId))) {
+      return response({ error: "Forbidden" }, 403);
+    }
+
     // بررسی وجود پرداخت‌کننده و تمام شرکت‌کنندگان
-    const userIds = [...new Set([body.paidById, ...paidForIds])];
+    const userIds = [...new Set([paidById, ...paidForIds])];
     const placeholders = userIds.map(() => "?").join(", ");
 
     const users = await env.expense_app_db
@@ -106,7 +124,7 @@ export async function handleCreateExpense(
       members.results.map((member) => member.user_id)
     );
 
-    if (!memberIds.has(body.paidById)) {
+    if (!memberIds.has(paidById)) {
       return response(
         { error: "Payer must be a member of the group" },
         400
@@ -227,7 +245,7 @@ export async function handleCreateExpense(
           body.id,
           body.groupId,
           body.amount,
-          body.paidById,
+          paidById,
           body.dateTime,
           body.description,
           isEqualSplit ? 1 : 0,
@@ -279,7 +297,7 @@ export async function handleCreateExpense(
       {
         id: body.id,
         amount: body.amount,
-        paidById: body.paidById,
+        paidById: paidById,
         paidForIds,
         groupId: body.groupId,
         dateTime: body.dateTime,

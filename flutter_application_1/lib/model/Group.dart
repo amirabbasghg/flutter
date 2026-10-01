@@ -1,7 +1,6 @@
 // lib/model/Group.dart
 import 'dart:math';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:uuid/uuid.dart';
 
 import 'Expense.dart';
@@ -33,26 +32,27 @@ class Group {
         expenseIds = [],
         createdAt = DateTime.now();
 
-  factory Group.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+  /// ساخت از JSON بک‌اند. createdAt به‌صورت ISO-8601 (UTC) می‌آید.
+  factory Group.fromJson(Map<String, dynamic> json) {
     return Group(
-      id: doc.id,
-      name: data['name'] ?? '',
-      memberIds: List<String>.from(data['memberIds'] ?? []),
-      expenseIds: List<String>.from(data['expenseIds'] ?? []),
-      createdBy: data['createdBy'] ?? '',
-      createdAt: (data['createdAt'] as Timestamp).toDate(),
+      id: (json['id'] ?? '') as String,
+      name: (json['name'] ?? '') as String,
+      memberIds: (json['memberIds'] as List?)?.cast<String>().toList() ?? [],
+      expenseIds: (json['expenseIds'] as List?)?.cast<String>().toList() ?? [],
+      createdBy: (json['createdBy'] ?? '') as String,
+      createdAt:
+          DateTime.tryParse((json['createdAt'] ?? '') as String)?.toLocal() ??
+              DateTime.now(),
     );
   }
 
-  Map<String, dynamic> toFirestore() {
+  /// بدنه‌ی POST /api/groups و PUT /api/groups/:id.
+  /// سرور createdBy و createdAt را خودش از توکن/زمان سرور می‌گیرد.
+  Map<String, dynamic> toJson() {
     return {
+      'id': id,
       'name': name,
       'memberIds': memberIds,
-      'expenseIds': expenseIds,
-      'createdBy': createdBy,
-      'createdAt': Timestamp.fromDate(createdAt),
-      'updatedAt': FieldValue.serverTimestamp(),
     };
   }
 

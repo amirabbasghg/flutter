@@ -72,7 +72,7 @@ class _CalculationPageState extends State<CalculationPage> {
 
     if (currentUser == null) {
       return Scaffold(
-        backgroundColor: Colors.grey.shade50,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -99,10 +99,13 @@ class _CalculationPageState extends State<CalculationPage> {
     return Theme(
       data: Theme.of(context).copyWith(
         primaryColor: _primaryColor,
-        colorScheme: ColorScheme.light(primary: _primaryColor),
+        // همان مشکل SettlementPage: ColorScheme.light صفحه را در حالت تیره
+        // هم روشن نگه می‌داشت.
+        colorScheme:
+            Theme.of(context).colorScheme.copyWith(primary: _primaryColor),
       ),
       child: Scaffold(
-        backgroundColor: Colors.grey.shade50,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         appBar: AppBar(
           toolbarHeight: 100,
           title: Row(

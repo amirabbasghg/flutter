@@ -1,5 +1,6 @@
 import { Env } from "../types";
 import { response } from "../utils/response";
+import { requireGroupMember, getExpenseGroupId, isGroupMember } from "../auth/authorization";
 
 type CustomSplit = {
   userId: string;
@@ -12,6 +13,16 @@ export async function handleUpdateExpense(
   expenseId: string
 ): Promise<Response> {
   try {
+    // فقط اعضای گروه آن هزینه می‌توانند آن را ویرایش کنند
+    const currentGroupId = await getExpenseGroupId(env, expenseId);
+    if (currentGroupId === null) {
+      return response({ error: "Expense not found" }, 404);
+    }
+    const authorizedId = await requireGroupMember(request, env, currentGroupId);
+    if (authorizedId instanceof Response) {
+      return authorizedId;
+    }
+
     const body = await request.json<{
       amount?: number;
       paidById?: string;
@@ -54,6 +65,8 @@ export async function handleUpdateExpense(
 
     // مقادیر جدید یا مقادیر فعلی
     const amount = body.amount ?? existingExpense.amount;
+    // پرداخت‌کننده قابل تغییر است (مثل createExpense)، ولی باید عضو همان
+    // گروه باشد — همان چکی که پایین‌تر روی memberIds انجام می‌شود.
     const paidById = body.paidById ?? existingExpense.paid_by_id;
     const groupId = body.groupId ?? existingExpense.group_id;
     const dateTime = body.dateTime ?? existingExpense.date_time;
@@ -107,6 +120,14 @@ export async function handleUpdateExpense(
 
     if (!group) {
       return response({ error: "Group not found" }, 404);
+    }
+
+    // اگر گروه عوض شده، کاربر فعلی باید عضو گروه جدید هم باشد
+    if (groupId !== currentGroupId && !(await isGroupMember(env, authorizedId, groupId))) {
+      return response(
+        { error: "You must be a member of the target group" },
+        403
+      );
     }
 
     // بررسی وجود کاربران

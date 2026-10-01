@@ -1,11 +1,18 @@
 import { Env } from "../types";
 import { response } from "../utils/response";
+import { requireGroupMember } from "../auth/authorization";
 
 export async function handleGetGroup(
   request: Request,
   env: Env,
   groupId: string
 ): Promise<Response> {
+  // فقط اعضای گروه می‌توانند اطلاعات گروه را ببینند
+  const authorized = await requireGroupMember(request, env, groupId);
+  if (authorized instanceof Response) {
+    return authorized;
+  }
+
   const group = await env.expense_app_db
     .prepare(`
       SELECT id, name, created_by, created_at

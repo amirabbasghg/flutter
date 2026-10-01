@@ -1,4 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required for the Cloudflare Workers API (and Google Sign-In).
+         Flutter only injects this into debug/profile builds, so a release
+         APK has no network access at all without it. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <application
         android:label="مدیریت هزینه ها"
         android:name="${applicationName}"

@@ -1,5 +1,6 @@
 import { Env } from "../types";
 import { response } from "../utils/response";
+import { requireGroupCreator, groupExists } from "../auth/authorization";
 
 export async function handleUpdateGroup(
   request: Request,
@@ -7,22 +8,19 @@ export async function handleUpdateGroup(
   groupId: string
 ): Promise<Response> {
   try {
+    // فقط سازنده گروه می‌تواند نام یا اعضا را تغییر دهد
+    const authorized = await requireGroupCreator(request, env, groupId);
+    if (authorized instanceof Response) {
+      return authorized;
+    }
+
     const body = await request.json<{
       name?: string;
       memberIds?: string[];
     }>();
 
     // بررسی وجود گروه
-    const existingGroup = await env.expense_app_db
-      .prepare(`
-        SELECT id
-        FROM groups
-        WHERE id = ?
-      `)
-      .bind(groupId)
-      .first<{ id: string }>();
-
-    if (!existingGroup) {
+    if (!(await groupExists(env, groupId))) {
       return response({ error: "Group not found" }, 404);
     }
 
