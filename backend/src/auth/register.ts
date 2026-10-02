@@ -32,12 +32,33 @@ export async function handleRegister(request: Request, env: Env): Promise<Respon
     }
     const password = body.password as string;
 
+    // D1/SQLite compares TEXT with BINARY collation, so `WHERE email = ?` only
+    // matches an exactly-lowercase stored value. Legacy rows (pre-normalization
+    // or created via Google sign-in whose token email had uppercase letters)
+    // can be stored as "User@Gmail.com". Those rows never matched this query,
+    // yet a later case-insensitive lookup elsewhere made the email look
+    // "already used" to its real owner — and blocked re-registration attempts.
+    // Match case-insensitively here so the check is consistent everywhere.
     const emailTaken = await env.expense_app_db
-      .prepare(`SELECT id FROM users WHERE email = ?`)
+      .prepare(
+        `SELECT u.id,
+                (SELECT 1 FROM google_identities g WHERE g.user_id = u.id LIMIT 1) AS has_google_identity
+         FROM users u
+         WHERE LOWER(TRIM(u.email)) = ?`,
+      )
       .bind(email)
-      .first<{ id: string }>();
+      .first<{ id: string; has_google_identity: number | null }>();
     if (emailTaken) {
-      return response({ error: "email-already-in-use" }, 409);
+      // Tell the client *why* the email is taken: accounts created through
+      // "Login with Google" have no password row, so a password sign-up will
+      // always fail for them — the user must use the Google button instead.
+      return response(
+        {
+          error: "email-already-in-use",
+          registeredViaGoogle: emailTaken.has_google_identity === 1,
+        },
+        409,
+      );
     }
 
     const nameLower = name.toLowerCase();
