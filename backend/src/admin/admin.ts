@@ -86,7 +86,7 @@ export async function handleAdminBootstrap(
     }>();
 
   const expensePayees = await env.expense_app_db
-    .prepare(`SELECT expense_id, user_id FROM expense_payees`)
+    .prepare(`SELECT expense_id, user_id FROM expense_participants`)
     .all<{ expense_id: string; user_id: string }>();
 
   const payeesByExpense = new Map<string, string[]>();
@@ -146,6 +146,9 @@ export async function handleAdminDeleteUser(
   await env.expense_app_db.batch([
     env.expense_app_db.prepare(`DELETE FROM google_identities WHERE user_id = ?`).bind(userId),
     env.expense_app_db.prepare(`DELETE FROM auth_credentials WHERE user_id = ?`).bind(userId),
+    env.expense_app_db.prepare(`DELETE FROM friendships WHERE user_id = ? OR friend_id = ?`).bind(userId, userId),
+    env.expense_app_db.prepare(`DELETE FROM expense_participants WHERE user_id = ?`).bind(userId),
+    env.expense_app_db.prepare(`DELETE FROM expense_splits WHERE user_id = ?`).bind(userId),
     env.expense_app_db.prepare(`DELETE FROM group_members WHERE user_id = ?`).bind(userId),
     env.expense_app_db.prepare(`DELETE FROM display_names WHERE display_name_lower = ?`).bind(user.name.toLowerCase()),
     env.expense_app_db.prepare(`DELETE FROM users WHERE id = ?`).bind(userId),
@@ -164,7 +167,8 @@ export async function handleAdminDeleteGroup(
   if (auth instanceof Response) return auth;
 
   await env.expense_app_db.batch([
-    env.expense_app_db.prepare(`DELETE FROM expense_payees WHERE expense_id IN (SELECT id FROM expenses WHERE group_id = ?)`).bind(groupId),
+    env.expense_app_db.prepare(`DELETE FROM expense_splits WHERE expense_id IN (SELECT id FROM expenses WHERE group_id = ?)`).bind(groupId),
+    env.expense_app_db.prepare(`DELETE FROM expense_participants WHERE expense_id IN (SELECT id FROM expenses WHERE group_id = ?)`).bind(groupId),
     env.expense_app_db.prepare(`DELETE FROM expenses WHERE group_id = ?`).bind(groupId),
     env.expense_app_db.prepare(`DELETE FROM group_members WHERE group_id = ?`).bind(groupId),
     env.expense_app_db.prepare(`DELETE FROM groups WHERE id = ?`).bind(groupId),
@@ -183,7 +187,8 @@ export async function handleAdminDeleteExpense(
   if (auth instanceof Response) return auth;
 
   await env.expense_app_db.batch([
-    env.expense_app_db.prepare(`DELETE FROM expense_payees WHERE expense_id = ?`).bind(expenseId),
+    env.expense_app_db.prepare(`DELETE FROM expense_splits WHERE expense_id = ?`).bind(expenseId),
+    env.expense_app_db.prepare(`DELETE FROM expense_participants WHERE expense_id = ?`).bind(expenseId),
     env.expense_app_db.prepare(`DELETE FROM expenses WHERE id = ?`).bind(expenseId),
   ]);
 
