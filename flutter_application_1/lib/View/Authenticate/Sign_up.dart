@@ -34,9 +34,24 @@ class _SignUpState extends State<SignUp> {
       return true;
     } on ApiException catch (e) {
       if (mounted) {
-        _showErrorSnackbar(
-          e.statusCode == 409 ? 'این ایمیل قبلاً ثبت شده است' : e.message,
-        );
+        // ۴۰۹ دو علت متفاوت دارد و پیام یکی («قبلاً ثبت شده») کاربرانِ
+        // واقعیِ بدون حساب را گیج می‌کرد:
+        // 1) ایمیل قبلاً با «ورود با گوگل» ثبت شده (registeredViaGoogle از
+        //    بک‌اند) → باید همان دکمه‌ی گوگل را بزند، نه فرم رمز.
+        // 2) واقعاً با همین ایمیل حساب رمزعبوری وجود دارد.
+        // 3) نام نمایشی تکراری است (display-name-taken) → پیام درست همان است.
+        final isDisplayNameTaken = e.message.contains('display-name');
+        final viaGoogle = e.details?['registeredViaGoogle'] == true;
+        final message = e.statusCode != 409
+            ? e.message
+            : isDisplayNameTaken
+                ? 'این نام قبلاً انتخاب شده است، یک نام دیگر امتحان کنید'
+                : viaGoogle
+                    ? 'این ایمیل قبلاً با «ورود با گوگل» ثبت شده است. '
+                        'برای ادامه روی دکمه‌ی «ثبت نام با گوگل» بزنید.'
+                    : 'این ایمیل قبلاً ثبت نام شده است. وارد شوید یا با '
+                        '«ورود با گوگل» امتحان کنید.';
+        _showErrorSnackbar(message);
       }
       return false;
     } catch (_) {

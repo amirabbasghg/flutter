@@ -11,7 +11,12 @@ import 'package:namer_app/Services/TokenStore.dart';
 class ApiException implements Exception {
   final int statusCode;
   final String message;
-  ApiException(this.statusCode, this.message);
+
+  /// بدنه‌ی کامل پاسخ خطای سرور (اگر JSON بوده) تا UI بتواند فیلدهای
+  /// اضافی مثل `registeredViaGoogle` را بخواند.
+  final Map<String, dynamic>? details;
+
+  ApiException(this.statusCode, this.message, [this.details]);
 
   @override
   String toString() => 'ApiException($statusCode): $message';
@@ -41,6 +46,16 @@ class ApiService {
 
   final http.Client _client = http.Client();
   bool _isRefreshing = false;
+
+  // Only GETs to these paths may ever be served from cache. Auth endpoints
+  // (register/login/refresh/google) are POSTs, but a browser/service-worker
+  // or an intermediate cache could still replay a stale "email-already-in-use"
+  // response after the account was deleted — so every auth request explicitly
+  // asks for a fresh network response.
+  static const _noStoreHeaders = {
+    'Cache-Control': 'no-store',
+    'Pragma': 'no-cache',
+  };
 
   Map<String, String> get _jsonHeaders => {'Content-Type': 'application/json'};
 
@@ -88,7 +103,7 @@ class ApiService {
     try {
       final res = await _client.post(
         ApiConfig.uri('/auth/refresh'),
-        headers: _jsonHeaders,
+        headers: {..._jsonHeaders, ..._noStoreHeaders},
         body: jsonEncode({'refreshToken': refreshToken}),
       );
       final data = _asMap(decodeBody(res));
@@ -133,7 +148,7 @@ class ApiService {
       {bool authenticated = true}) async {
     final res = await _client.post(
       ApiConfig.uri(path),
-      headers: _authHeaders(authenticated),
+      headers: {..._authHeaders(authenticated), ..._noStoreHeaders},
       body: jsonEncode(body),
     );
     if (authenticated && res.statusCode == 401) {
@@ -141,7 +156,7 @@ class ApiService {
       if (!refreshed) throw SessionExpiredException();
       final retry = await _client.post(
         ApiConfig.uri(path),
-        headers: _authHeaders(),
+        headers: {..._authHeaders(), ..._noStoreHeaders},
         body: jsonEncode(body),
       );
       return _handle(retry);
@@ -206,7 +221,11 @@ class ApiService {
     if (res.statusCode >= 200 && res.statusCode < 300) {
       return data;
     }
-    throw ApiException(res.statusCode, _errorMessage(data, res));
+    throw ApiException(
+      res.statusCode,
+      _errorMessage(data, res),
+      _asMap(data),
+    );
   }
 
   // ===== Auth =====
