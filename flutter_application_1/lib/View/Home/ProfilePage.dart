@@ -5,6 +5,7 @@ import 'package:iranian_banks/iranian_banks.dart';
 import 'package:namer_app/View/Home/BankInfoPage.dart';
 import 'package:provider/provider.dart';
 
+import '../../Services/Api.dart';
 import '../../ViewModel/AppStateVM.dart';
 import 'CardNumberInputFormatter.dart';
 
@@ -241,6 +242,7 @@ class _ProfilePageState extends State<ProfilePage> {
               icon: Icons.person,
               title: 'نام',
               value: currentUser.name ?? ' ',
+              onEdit: () => _showEditNameDialog(context, currentUser.name ?? ''),
             ),
             Divider(
               indent: 5,
@@ -280,6 +282,7 @@ class _ProfilePageState extends State<ProfilePage> {
     required IconData icon,
     required String title,
     required String value,
+    VoidCallback? onEdit,
   }) {
     return Padding(
       padding: EdgeInsets.symmetric(vertical: 12),
@@ -315,7 +318,109 @@ class _ProfilePageState extends State<ProfilePage> {
               ],
             ),
           ),
+          if (onEdit != null)
+            IconButton(
+              icon: Icon(
+                Icons.edit,
+                color: Theme.of(context).colorScheme.primary,
+                size: 20,
+              ),
+              onPressed: onEdit,
+            ),
         ],
+      ),
+    );
+  }
+
+  void _showEditNameDialog(BuildContext context, String currentName) {
+    final formKey = GlobalKey<FormState>();
+    final nameController = TextEditingController(text: currentName);
+    bool loading = false;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('تغییر نام نمایش'),
+          content: Form(
+            key: formKey,
+            child: TextFormField(
+              controller: nameController,
+              decoration: InputDecoration(
+                labelText: 'نام جدید',
+                border: OutlineInputBorder(),
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'لطفاً نام خود را وارد کنید';
+                }
+                if (value.trim().length > 50) {
+                  return 'نام نمی‌تواند بیش از 50 کاراکتر باشد';
+                }
+                return null;
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: loading ? null : () => Navigator.pop(context),
+              child: Text('انصراف'),
+            ),
+            ElevatedButton(
+              onPressed: loading
+                  ? null
+                  : () async {
+                      if (formKey.currentState!.validate()) {
+                        setDialogState(() => loading = true);
+                        final newName = nameController.text.trim();
+                        final appStateVM =
+                            Provider.of<AppStateVM>(context, listen: false);
+                        try {
+                          await appStateVM.updateCurrentUser(name: newName);
+                          if (context.mounted) {
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('نام با موفقیت تغییر یافت'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          }
+                        } on ApiException catch (e) {
+                          setDialogState(() => loading = false);
+                          String errorMsg;
+                          if (e.message == 'display-name-taken' || e.statusCode == 409) {
+                            errorMsg = 'این نام‌کاربری قبلاً استفاده شده است';
+                          } else {
+                            errorMsg = e.message;
+                          }
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(errorMsg),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        } catch (_) {
+                          setDialogState(() => loading = false);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('تغییر نام انجام نشد'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
+                    },
+              child: loading
+                  ? SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text('ذخیره'),
+            ),
+          ],
+        ),
       ),
     );
   }
