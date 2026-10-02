@@ -46,7 +46,11 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e is ApiException ? e.message : 'خطا در دریافت اطلاعات مدیریت کل';
+        if (e is ApiException) {
+          _error = 'خطا در دریافت اطلاعات مدیریت کل (کد ${e.statusCode}): ${e.message}';
+        } else {
+          _error = 'خطا در دریافت اطلاعات مدیریت کل: $e';
+        }
         _loading = false;
       });
     }
