@@ -27,21 +27,31 @@ export async function handleSearchUsers(
 
   // جست‌وجو فقط روی نام نمایشی. ایمیل عمداً جست‌وجو/برگشت داده نمی‌شود: با آن
   // می‌شد وجود یک ایمیل مشخص در سیستم را تأیید کرد.
-  const users = await env.expense_app_db
-    .prepare(`
-      SELECT id, name, photo_url
-      FROM users
-      WHERE id != ?
-        ${hasQuery ? "AND name LIKE ?2 COLLATE NOCASE" : ""}
-      ORDER BY name COLLATE NOCASE
-      LIMIT ${MAX_RESULTS}
-    `)
-    .bind(authenticatedUserId, pattern)
-    .all<{
-      id: string;
-      name: string;
-      photo_url: string | null;
-    }>();
+  const stmt = hasQuery
+    ? env.expense_app_db
+        .prepare(`
+          SELECT id, name, photo_url
+          FROM users
+          WHERE id != ? AND name LIKE ? COLLATE NOCASE
+          ORDER BY name COLLATE NOCASE
+          LIMIT ${MAX_RESULTS}
+        `)
+        .bind(authenticatedUserId, pattern)
+    : env.expense_app_db
+        .prepare(`
+          SELECT id, name, photo_url
+          FROM users
+          WHERE id != ?
+          ORDER BY name COLLATE NOCASE
+          LIMIT ${MAX_RESULTS}
+        `)
+        .bind(authenticatedUserId);
+
+  const users = await stmt.all<{
+    id: string;
+    name: string;
+    photo_url: string | null;
+  }>();
 
   // ایمیل و شماره کارت در نتیجه‌ی جست‌وجو برنمی‌گردند — این‌ها فقط برای
   // دوستان و هم‌گروهی‌ها (/api/me/contacts) در دسترس‌اند.

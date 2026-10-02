@@ -1,6 +1,6 @@
 import { Env } from "../types";
 import { response } from "../utils/response";
-import { requireGroupCreator, groupExists } from "../auth/authorization";
+import { requireGroupMember, groupExists } from "../auth/authorization";
 
 export async function handleAddMember(
   request: Request,
@@ -8,8 +8,8 @@ export async function handleAddMember(
   groupId: string
 ): Promise<Response> {
   try {
-    // فقط سازنده گروه می‌تواند عضو اضافه کند
-    const authorized = await requireGroupCreator(request, env, groupId);
+    // هر عضوی از گروه می‌تواند عضو جدید اضافه کند
+    const authorized = await requireGroupMember(request, env, groupId);
     if (authorized instanceof Response) {
       return authorized;
     }

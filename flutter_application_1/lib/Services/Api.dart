@@ -445,6 +445,24 @@ class ApiService {
     await delete('/expenses/$expenseId');
   }
 
+  // ===== Admin =====
+
+  Future<Map<String, dynamic>> adminBootstrap() async {
+    return await get('/admin/bootstrap') as Map<String, dynamic>;
+  }
+
+  Future<void> adminDeleteUser(String userId) async {
+    await delete('/admin/users/$userId');
+  }
+
+  Future<void> adminDeleteGroup(String groupId) async {
+    await delete('/admin/groups/$groupId');
+  }
+
+  Future<void> adminDeleteExpense(String expenseId) async {
+    await delete('/admin/expenses/$expenseId');
+  }
+
   /// سرور هم آرایه‌ی خالی برمی‌گرداند و هم (در بعضی مسیرها) آبجکت با کلید.
   List<dynamic> _asList(dynamic data) {
     if (data is List) return data;
