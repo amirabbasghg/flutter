@@ -354,11 +354,18 @@ class ApiService {
   /// کاربرانی که برای این حساب قابل مشاهده‌اند: خودش، دوستان و هم‌گروهی‌ها.
   Future<List<dynamic>> getContacts() async => _asList(await get('/me/contacts'));
 
-  /// جست‌وجوی کاربران بر اساس نام نمایشی (حداقل ۲ نویسه).
+  /// همه‌ی کاربران اپ (برای تب «پیدا کردن»؛ فیلتر کردن محلی روی همین لیست
+  /// انجام می‌شود، نه با یک درخواست به ازای هر حرف تایپ‌شده).
   /// نتیجه فقط id/name/photoURL دارد — ایمیل و شماره کارت برنمی‌گردند.
+  Future<List<dynamic>> listAllUsers() async =>
+      _asList(await get('/users/search'));
+
+  /// جست‌وجوی کاربران روی سرور. معمولاً لازم نیست — [listAllUsers] +
+  /// فیلتر محلی برای تعداد کاربرانِ یک اپ دوستانه کافی است؛ این فقط برای
+  /// سازگاری/حالت‌های خاص نگه داشته شده.
   Future<List<dynamic>> searchUsers(String query) async {
     final q = query.trim();
-    if (q.length < 2) return const [];
+    if (q.isEmpty) return listAllUsers();
     return _asList(await get('/users/search?q=${Uri.encodeQueryComponent(q)}'));
   }
 

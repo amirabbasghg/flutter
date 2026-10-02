@@ -85,10 +85,12 @@ class Group {
       final paidBy = expense.getPaidBy(allUsers);
       final paidForUsers = expense.getPaidFor(allUsers);
 
+      // سهم واقعیِ همان نفر، نه میانگین اعشاری — وگرنه مانده‌ها هیچ‌وقت صفر
+      // نمی‌شوند (نگاه کنید به Expense.shares).
       if (paidBy.id == user1.id && paidForUsers.any((user) => user.id == user2.id)) {
-        debt += expense.sharePerPerson;
+        debt += expense.shareOf(user2.id);
       } else if (paidBy.id == user2.id && paidForUsers.any((user) => user.id == user1.id)) {
-        debt -= expense.sharePerPerson;
+        debt -= expense.shareOf(user1.id);
       }
     }
     return debt;

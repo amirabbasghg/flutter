@@ -78,7 +78,7 @@ class _FinancialGroupPage extends State<FinancialGroupPage> {
           SizedBox(height: 16),
           Text(
             'هنوز در گروهی عضو نیستید',
-            style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+            style: TextStyle(fontSize: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
           SizedBox(height: 8),
           Text(
@@ -459,7 +459,7 @@ class _FinancialGroupPage extends State<FinancialGroupPage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title, style: TextStyle(color: Colors.grey[600])),
+          Text(title, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           Text(
             value,
             style: TextStyle(

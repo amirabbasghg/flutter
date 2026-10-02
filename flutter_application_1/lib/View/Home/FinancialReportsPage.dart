@@ -29,7 +29,7 @@ class _FinancialReportsPageState extends State<FinancialReportsPage> {
     final groups = appStateVM.groups;
 
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(
           '📊 گزارشات مالی',
@@ -58,7 +58,7 @@ class _FinancialReportsPageState extends State<FinancialReportsPage> {
             'هنوز گروهی وجود ندارد',
             style: TextStyle(
               fontSize: 18,
-              color: Colors.grey[600],
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -307,7 +307,7 @@ class _FinancialReportsPageState extends State<FinancialReportsPage> {
       child: Card(
         elevation: 3,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        color: Colors.white,
+        color: Theme.of(context).cardColor,
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
@@ -336,7 +336,7 @@ class _FinancialReportsPageState extends State<FinancialReportsPage> {
                 title,
                 style: TextStyle(
                   fontSize: 12,
-                  color: Colors.grey[600],
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
                 textAlign: TextAlign.center,
               ),

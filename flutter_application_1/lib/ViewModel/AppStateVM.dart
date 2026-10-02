@@ -362,9 +362,16 @@ class AppStateVM extends ChangeNotifier {
     await _refreshContacts();
   }
 
-  /// جست‌وجوی کاربران سمت سرور (حداقل ۲ نویسه).
-  /// در نسخه‌ی Firestore این کار با فیلتر کردن «همه‌ی کاربران» در حافظه انجام
-  /// می‌شد؛ حالا کل جدول users هیچ‌وقت به کلاینت نمی‌آید.
+  /// همه‌ی کاربران اپ، برای تب «پیدا کردن» در صفحه‌ی دوستان. فیلتر کردن روی
+  /// همین لیست محلی انجام می‌شود — دقیقاً مثل نسخه‌ی قدیمیِ Firestore، با این
+  /// تفاوت که اینجا یک‌بار از سرور می‌آید نه با یک stream دائمی.
+  Future<List<User>> listAllUsers() async {
+    final results = await _api.listAllUsers();
+    return _parseList(results, User.fromJson);
+  }
+
+  /// جست‌وجوی کاربران سمت سرور. برای تعداد کاربرانِ یک اپ دوستانه معمولاً
+  /// لازم نیست؛ [listAllUsers] کافی است.
   Future<List<User>> searchUsers(String query) async {
     final results = await _api.searchUsers(query);
     return _parseList(results, User.fromJson);

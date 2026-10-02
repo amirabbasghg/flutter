@@ -7,7 +7,6 @@ import 'package:intl/intl.dart';
 import 'package:persian_number_utility/persian_number_utility.dart';
 import 'package:provider/provider.dart';
 import 'package:persian_datetime_picker/persian_datetime_picker.dart';
-import 'package:flutter_persian_calendar/flutter_persian_calendar.dart';
 
 import 'package:namer_app/model/Group.dart';
 import 'package:namer_app/model/User.dart';
@@ -176,7 +175,7 @@ class _CalculationPageState extends State<CalculationPage> {
                           filteredGroups.isEmpty ? '❌ گروهی با فیلترهای انتخاب شده یافت نشد' : '👈 یک گروه انتخاب کنید',
                           style: TextStyle(
                             fontSize: 18,
-                            color: Colors.grey.shade600,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
                             fontWeight: FontWeight.w500,
                           ),
                           textAlign: TextAlign.center,
@@ -482,121 +481,52 @@ class _CalculationPageState extends State<CalculationPage> {
   //     });
   //   }
   // }
+  // انتخاب تاریخ شروع
+  //
+  // ⚠️ قبلاً اینجا دیالوگ دست‌ساز روی ویجت PersianCalendar (پکیج
+  // flutter_persian_calendar) بود که دو باگ داشت: ۱) دکمه‌ی «لغو» دقیقاً کار
+  // «تأیید» را می‌کرد (هر دو فقط Navigator.pop می‌زدند)، ۲) خودِ پکیج روز
+  // انتخاب‌شده را با شماره‌ی ماه مقایسه می‌کرد (`selectedDate.month ==
+  // dayIndex + 1`)، پس رنگ‌آمیزی روز انتخابی اشتباه بود و کاربر فکر می‌کرد لمسش
+  // اثر نکرده. showPersianDatePicker از پکیج persian_datetime_picker (که از
+  // قبل در پروژه بود و FinancialReportsPage درست استفاده‌اش می‌کرد) هیچ‌کدام
+  // از این مشکلات را ندارد.
   Future<Jalali?> _selectStartDate(BuildContext context) async {
-    Jalali? selectedDate ;
-
-    await showDialog(
+    final selectedDate = await showPersianDatePicker(
       context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-          child: PersianCalendar(
-            height: 380.0,
-            initialDate: selectedDate,
-            startingDate: Jalali(1400, 1, 1),
-            endingDate: Jalali(1450, 12, 29),
-            onDateChanged: (Jalali newDate) {
-              selectedDate = newDate;
-            },
-            primaryColor: _primaryColor,
-            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-            textStyle: TextStyle(
-              fontFamily: 'Vazir',
-            ),
-            confirmButton: Container(
-              padding: EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                      },
-                      child: Text('لغو'),
-                    ),
-                  ),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        if (selectedDate != null) {
-                                          setState(() {
-                                            _startDate = selectedDate;
-                                            if (_endDate != null && _startDate!.isAfter(_endDate!)) {
-                                              _endDate = null;
-                                            }
-                                          });
-                                        }
-                        Navigator.of(context).pop();
-                      },
-                      child: Text('تأیید'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-        );
-      },
+      initialDate: _startDate ?? Jalali.now(),
+      firstDate: Jalali(1400, 1, 1),
+      lastDate: Jalali(1450, 12, 29),
+      locale: const Locale('fa'),
     );
+
+    if (selectedDate != null) {
+      setState(() {
+        _startDate = selectedDate;
+        if (_endDate != null && _startDate!.isAfter(_endDate!)) {
+          _endDate = null;
+        }
+      });
+    }
 
     return selectedDate;
   }
 
   // انتخاب تاریخ پایان
   void _selectEndDate(void Function(void Function()) setState) async {
-    final initialDate = _endDate ?? _startDate ?? Jalali.now();
-    Jalali? selectedDate ;
-    await showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          return Dialog(
-            child: PersianCalendar(
-              height: 380.0,
-              initialDate: initialDate,
-              startingDate: Jalali(1400, 1, 1),
-              endingDate: Jalali(1450, 12, 29),
-              onDateChanged: (Jalali newDate) {
-                selectedDate = newDate;
-              },
-              primaryColor: _primaryColor,
-              backgroundColor: Theme
-                  .of(context)
-                  .scaffoldBackgroundColor,
-              textStyle: TextStyle(
-                fontFamily: 'Vazir',
-              ),
-              confirmButton: Container(
-                padding: EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                        },
-                        child: Text('لغو'),
-                      ),
-                    ),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          if (selectedDate != null) {
-                            setState(() {
-                              _endDate = selectedDate;
-                            });
-                          }
-                          Navigator.of(context).pop();
-                        },
-                        child: Text('تأیید'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        }
+    final selectedDate = await showPersianDatePicker(
+      context: context,
+      initialDate: _endDate ?? _startDate ?? Jalali.now(),
+      firstDate: Jalali(1400, 1, 1),
+      lastDate: Jalali(1450, 12, 29),
+      locale: const Locale('fa'),
     );
+
+    if (selectedDate != null) {
+      setState(() {
+        _endDate = selectedDate;
+      });
+    }
   }
 
   // بخش فیلتر گروه‌ها
@@ -861,7 +791,7 @@ class _CalculationPageState extends State<CalculationPage> {
                   'هزینه‌ای در بازه زمانی انتخاب شده یافت نشد',
                   style: TextStyle(
                     fontSize: 16,
-                    color: Colors.grey.shade600,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -937,7 +867,7 @@ class _CalculationPageState extends State<CalculationPage> {
           title,
           style: TextStyle(
             fontSize: 10,
-            color: Colors.grey.shade600,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ),
         SizedBox(height: 2),
@@ -1003,14 +933,14 @@ class _CalculationPageState extends State<CalculationPage> {
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
-                          color: Colors.grey.shade800,
+                          color: Theme.of(context).colorScheme.onSurface,
                         ),
                       ),
                       SizedBox(height: 2),
                       Text(
                         'بدهی‌های دو به دو',
                         style: TextStyle(
-                          color: Colors.grey.shade600,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                           fontSize: 12,
                         ),
                       ),
@@ -1145,7 +1075,7 @@ class _CalculationPageState extends State<CalculationPage> {
                   user2.name,
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade800,
+                    color: Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
                 SizedBox(height: 2),

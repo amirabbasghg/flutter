@@ -149,18 +149,52 @@ class Expense {
     }
   }
 
-  // سایر متدهای utility بدون تغییر باقی می‌مانند...
+  /// میانگین خامِ سهم هر نفر — ممکن است اعشاری باشد.
+  /// برای محاسبه‌ی بدهی از [shareOf] استفاده کنید، نه از این.
   double get sharePerPerson {
     if (paidForIds.isEmpty) return 0;
     return amount / paidForIds.length;
   }
 
-  double getCustomShare(String userId) {
-    if (isEqualSplit) {
-      return sharePerPerson;
+  /// سهم هر شرکت‌کننده، به تومانِ صحیح، طوری که **مجموع سهم‌ها دقیقاً برابر
+  /// مبلغ کل شود**.
+  ///
+  /// ⚠️ چرا لازم است: تقسیم مساویِ ۱۰۰٬۰۰۰ بین ۳ نفر یعنی ۳۳۳۳۳٫۳۳… برای هر
+  /// نفر. با اعشار، مانده‌ها هیچ‌وقت دقیقاً صفر نمی‌شوند و بعد از تسویه‌ی کامل
+  /// باز چیزی مثل «۰ تومان بدهکار» یا «۱ تومان» باقی می‌ماند — همان چیزی که
+  /// در گروه شریفیون دیده شد. اینجا باقیمانده‌ی تقسیم (۰ تا n-۱ تومان) بین
+  /// نفرات اول پخش می‌شود تا جمع سهم‌ها مو به مو برابر کل باشد.
+  ///
+  /// ترتیب پخشِ باقیمانده بر اساس شناسه‌ی مرتب‌شده است تا برای یک هزینه‌ی ثابت
+  /// همیشه یک نتیجه بدهد (نه وابسته به ترتیب لیست در حافظه).
+  Map<String, double> shares() {
+    if (!isEqualSplit) {
+      return Map<String, double>.from(customSplits);
     }
-    return customSplits[userId] ?? 0;
+    final n = paidForIds.length;
+    if (n == 0) return const {};
+
+    final total = amount.round();
+    final base = total ~/ n;
+    var remainder = total - base * n;
+
+    final ids = [...paidForIds]..sort();
+    final out = <String, double>{};
+    for (final id in ids) {
+      var share = base;
+      if (remainder > 0) {
+        share += 1;
+        remainder -= 1;
+      }
+      out[id] = share.toDouble();
+    }
+    return out;
   }
+
+  /// سهم یک کاربر از این هزینه (۰ اگر شرکت‌کننده نباشد).
+  double shareOf(String userId) => shares()[userId] ?? 0;
+
+  double getCustomShare(String userId) => shareOf(userId);
 
   bool isUserInvolved(User user, List<User> allUsers) {
     return paidById == user.id || paidForIds.contains(user.id);
@@ -172,24 +206,21 @@ class Expense {
     return 'not_involved';
   }
 
+  /// مانده‌ی این کاربر از این هزینه. مثبت = طلبکار، منفی = بدهکار.
+  ///
+  /// جمعِ این مقدار روی همه‌ی افراد درگیر **دقیقاً صفر** است، چون هم از
+  /// [shares] استفاده می‌کند و هم کل را از روی همان سهم‌ها می‌گیرد.
   double getDebtAmountForUser(User user, List<User> allUsers) {
+    final split = shares();
+    final userShare = split[user.id] ?? 0;
+
     if (paidById == user.id) {
-      if (isEqualSplit) {
-        return amount - (paidForIds.contains(user.id) ? sharePerPerson : 0);
-      } else {
-        final totalPaidForOthers = customSplits.values.fold(0.0, (sum, amount) => sum + amount);
-        if (customSplits.containsKey(user.id)) {
-          return totalPaidForOthers - customSplits[user.id]!;
-        } else {
-          return totalPaidForOthers;
-        }
-      }
-    } else if (paidForIds.contains(user.id)) {
-      if (isEqualSplit) {
-        return -sharePerPerson;
-      } else {
-        return -customSplits[user.id]!;
-      }
+      // آنچه پرداخت کرده منهای سهم خودش
+      final total = split.values.fold(0.0, (sum, value) => sum + value);
+      return total - userShare;
+    }
+    if (split.containsKey(user.id)) {
+      return -userShare;
     }
     return 0;
   }

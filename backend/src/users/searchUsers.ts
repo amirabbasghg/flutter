@@ -2,6 +2,11 @@ import { Env } from "../types";
 import { response } from "../utils/response";
 import { authenticate } from "../auth/middleware";
 
+// حداکثر تعداد کاربری که در یک درخواست برمی‌گردد. اپ تب «پیدا کردن» را با
+// یک فهرستِ کامل پر می‌کند و جست‌وجو را محلی روی همین فهرست انجام می‌دهد
+// (دقیقاً رفتار نسخه‌ی قدیمیِ Firestore)، پس اینجا سقفی سخاوتمندانه کافی است.
+const MAX_RESULTS = 500;
+
 export async function handleSearchUsers(
   request: Request,
   env: Env,
@@ -15,22 +20,21 @@ export async function handleSearchUsers(
   const url = new URL(request.url);
   const query = (url.searchParams.get("q") ?? "").trim();
 
-  if (query.length < 2) {
-    return response({ error: "q must contain at least 2 characters" }, 400);
-  }
-
+  // بدون q یعنی «همه‌ی کاربران را بده» — اپ خودش فیلتر می‌کند. با q یعنی
+  // جست‌وجوی سمت سرور (برای وقتی فهرست محلی هنوز نرسیده یا خیلی بزرگ است).
+  const hasQuery = query.length > 0;
   const pattern = `%${query}%`;
 
-  // جست‌وجو فقط روی نام نمایشی. ایمیل عمداً جست‌وجو نمی‌شود: با آن می‌شد
-  // وجود یک ایمیل مشخص در سیستم را تأیید کرد.
+  // جست‌وجو فقط روی نام نمایشی. ایمیل عمداً جست‌وجو/برگشت داده نمی‌شود: با آن
+  // می‌شد وجود یک ایمیل مشخص در سیستم را تأیید کرد.
   const users = await env.expense_app_db
     .prepare(`
       SELECT id, name, photo_url
       FROM users
       WHERE id != ?
-        AND name LIKE ? COLLATE NOCASE
+        ${hasQuery ? "AND name LIKE ?2 COLLATE NOCASE" : ""}
       ORDER BY name COLLATE NOCASE
-      LIMIT 20
+      LIMIT ${MAX_RESULTS}
     `)
     .bind(authenticatedUserId, pattern)
     .all<{

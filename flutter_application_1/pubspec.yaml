@@ -46,7 +46,6 @@ dependencies:
   iconsax_flutter: ^1.0.1
   pin_code_fields: ^8.0.1
   persian_number_utility: ^1.1.6
-  flutter_persian_calendar: ^0.0.3
   iranbanks: ^0.0.3
   iranian_banks: ^1.2.0
   flutter_localization: ^0.3.3

@@ -173,7 +173,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 'شماره حساب',
                 style: TextStyle(
                   fontSize: 14,
-                  color: textColor ?? Colors.grey[600],
+                  color: textColor ?? Theme.of(context).colorScheme.onSurfaceVariant,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -300,7 +300,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   title,
                   style: TextStyle(
                     fontSize: 14,
-                    color: Colors.grey[600],
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                     fontWeight: FontWeight.bold,
                   ),
                 ),

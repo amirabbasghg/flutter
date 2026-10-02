@@ -1,5 +1,4 @@
 // view/friends_page.dart
-import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -22,57 +21,52 @@ class _FriendsPageState extends State<FriendsPage> {
   String _searchQuery = '';
   int _selectedTab = 0;
 
-  // تب «پیدا کردن» سمت سرور جست‌وجو می‌کند. در نسخه‌ی Firestore کل جدول users
-  // روی گوشی بود و فیلتر کردنش محلی انجام می‌شد؛ با D1 دیگر چنین لیستی نداریم.
-  List<User> _searchResults = const [];
-  bool _isSearching = false;
-  Timer? _searchDebounce;
-  int _searchSeq = 0;
+  // تب «پیدا کردن»: کل فهرست کاربران یک‌بار از سرور گرفته می‌شود و جست‌وجو
+  // محلی روی همین فهرست انجام می‌شود — همان رفتار نسخه‌ی قدیمیِ Firestore،
+  // با این تفاوت که اینجا یک‌بار می‌آید، نه با یک stream دائمی.
+  //
+  // ⚠️ قبلاً هر تایپ باید حداقل ۲ حرف می‌شد و بعد از ۳۵۰ میلی‌ثانیه یک
+  // درخواست جدا به سرور می‌رفت؛ کاربر می‌خواست به‌جایش «همه را بیاور، بعد
+  // بینشان بگرد»، دقیقاً مثل قبل.
+  List<User> _allUsers = const [];
+  bool _isLoadingAllUsers = false;
+  String? _loadAllUsersError;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAllUsers();
+  }
 
   @override
   void dispose() {
-    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
-  void _onSearchChanged(String value) {
-    setState(() => _searchQuery = value);
-    _searchDebounce?.cancel();
-
-    final query = value.trim();
-    if (query.length < 2) {
-      setState(() {
-        _searchResults = const [];
-        _isSearching = false;
-      });
-      return;
-    }
-
-    // یک تأخیر کوتاه تا با هر حرف یک درخواست به سرور نرود
-    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
-      _runSearch(query);
+  Future<void> _loadAllUsers() async {
+    setState(() {
+      _isLoadingAllUsers = true;
+      _loadAllUsersError = null;
     });
-  }
-
-  Future<void> _runSearch(String query) async {
-    final seq = ++_searchSeq;
-    setState(() => _isSearching = true);
     try {
-      final results =
-          await context.read<AppStateVM>().searchUsers(query);
-      if (!mounted || seq != _searchSeq) return; // نتیجه‌ی قدیمی را نشان نده
+      final users = await context.read<AppStateVM>().listAllUsers();
+      if (!mounted) return;
       setState(() {
-        _searchResults = results;
-        _isSearching = false;
+        _allUsers = users;
+        _isLoadingAllUsers = false;
       });
     } catch (_) {
-      if (!mounted || seq != _searchSeq) return;
+      if (!mounted) return;
       setState(() {
-        _searchResults = const [];
-        _isSearching = false;
+        _loadAllUsersError = 'دریافت فهرست کاربران انجام نشد';
+        _isLoadingAllUsers = false;
       });
     }
+  }
+
+  void _onSearchChanged(String value) {
+    setState(() => _searchQuery = value);
   }
 
   @override
@@ -105,10 +99,13 @@ class _FriendsPageState extends State<FriendsPage> {
         .where((user) => currentUser.friendIds.contains(user.id))
         .toList();
 
-    final nonFriends = _searchResults
+    final searchQueryLower = _searchQuery.trim().toLowerCase();
+    final nonFriends = _allUsers
         .where((user) =>
             user.id != currentUser.id &&
-            !currentUser.friendIds.contains(user.id))
+            !currentUser.friendIds.contains(user.id) &&
+            (searchQueryLower.isEmpty ||
+                user.name.toLowerCase().contains(searchQueryLower)))
         .toList();
 
     return Scaffold(
@@ -157,13 +154,7 @@ class _FriendsPageState extends State<FriendsPage> {
                                 icon: Icon(Icons.close, color: Colors.white70),
                                 onPressed: () {
                                   _searchController.clear();
-                                  _searchDebounce?.cancel();
-                                  _searchSeq++; // نتیجه‌ی در راه را بی‌اعتبار کن
-                                  setState(() {
-                                    _searchQuery = '';
-                                    _searchResults = const [];
-                                    _isSearching = false;
-                                  });
+                                  setState(() => _searchQuery = '');
                                 },
                               )
                                   : null,
@@ -226,21 +217,26 @@ class _FriendsPageState extends State<FriendsPage> {
                     ),
                   ),
 
-                  // Tab 1: Search (سمت سرور)
-                  _searchQuery.trim().length < 2
-                      ? _buildEmptyState(
-                    Iconsax.search_status,
-                    'دوستان جدید پیدا کنید',
-                    'حداقل ۲ حرف از نام دوستتان را بنویسید',
-                    theme,
-                  )
-                      : _isSearching
+                  // Tab 1: پیدا کردن — فهرست کامل کاربران، با فیلتر محلی
+                  _isLoadingAllUsers && _allUsers.isEmpty
                       ? const Center(child: CircularProgressIndicator())
+                      : _loadAllUsersError != null && _allUsers.isEmpty
+                      ? _buildEmptyState(
+                    Iconsax.warning_2,
+                    _loadAllUsersError!,
+                    'برای تلاش دوباره لمس کنید',
+                    theme,
+                    onTap: _loadAllUsers,
+                  )
                       : nonFriends.isEmpty
                       ? _buildEmptyState(
                     Iconsax.search_status,
-                    'نتیجه‌ای یافت نشد',
-                    'اسم دیگری را امتحان کنید',
+                    _searchQuery.trim().isEmpty
+                        ? 'همه با شما دوست‌اند'
+                        : 'نتیجه‌ای یافت نشد',
+                    _searchQuery.trim().isEmpty
+                        ? 'کاربر دیگری برای افزودن نیست'
+                        : 'اسم دیگری را امتحان کنید',
                     theme,
                   )
                       : ListView.builder(
@@ -308,30 +304,39 @@ class _FriendsPageState extends State<FriendsPage> {
     );
   }
 
-  Widget _buildEmptyState(IconData icon, String title, String subtitle, ThemeData theme) {
+  Widget _buildEmptyState(
+    IconData icon,
+    String title,
+    String subtitle,
+    ThemeData theme, {
+    VoidCallback? onTap,
+  }) {
+    final content = Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(icon, size: 64, color: theme.primaryColor),
+        SizedBox(height: 16),
+        Text(
+          title,
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: theme.disabledColor,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        SizedBox(height: 8),
+        Text(
+          subtitle,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.disabledColor.withOpacity(0.7),
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+
+    if (onTap == null) return Center(child: content);
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 64, color: theme.primaryColor),
-          SizedBox(height: 16),
-          Text(
-            title,
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: theme.disabledColor,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          SizedBox(height: 8),
-          Text(
-            subtitle,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.disabledColor.withOpacity(0.7),
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
+      child: InkWell(onTap: onTap, child: Padding(padding: EdgeInsets.all(24), child: content)),
     );
   }
 
@@ -694,7 +699,7 @@ class FriendListItem extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: Colors.grey.shade600,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
                 SizedBox(height: 2),

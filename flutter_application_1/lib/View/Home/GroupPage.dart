@@ -60,7 +60,7 @@ class _GroupPageState extends State<GroupPage> {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 18,
-                      color: Colors.grey[600],
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
 
@@ -90,7 +90,7 @@ class _GroupPageState extends State<GroupPage> {
                     ),
                     subtitle: Text(
                       '${group.memberCount} عضو',
-                      style: TextStyle(color: Colors.grey[600]),
+                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
                     ),
                     trailing: group.createdBy == (appStateVM.currentUser?.id) ? IconButton(
                       icon: Icon(Icons.delete, color: Colors.red),
