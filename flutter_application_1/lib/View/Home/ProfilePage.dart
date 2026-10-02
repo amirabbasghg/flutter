@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../../Services/Api.dart';
 import '../../ViewModel/AppStateVM.dart';
+import 'AdminPanelPage.dart';
 import 'CardNumberInputFormatter.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -75,6 +76,36 @@ class _ProfilePageState extends State<ProfilePage> {
 
             // کارت اطلاعات دیگر (نام و ایمیل)
             _buildUserInfoCard(context, currentUser!),
+
+            if (currentUser != null && currentUser.isSuperAdmin) ...[
+              SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepPurple,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  icon: Icon(Icons.security, size: 20),
+                  label: Text(
+                    '🛡️ ورود به پنل مدیریت کل (Super Admin)',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => AdminPanelPage(),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
 
           ],
         ),

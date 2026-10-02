@@ -29,6 +29,12 @@ import { handleBootstrap } from "./me/bootstrap";
 import { handleUpdateMe } from "./me/updateMe";
 import { handleSearchUsers } from "./users/searchUsers";
 import { handleGetGroupExpenses } from "./groups/getExpenses";
+import {
+  handleAdminBootstrap,
+  handleAdminDeleteUser,
+  handleAdminDeleteGroup,
+  handleAdminDeleteExpense,
+} from "./admin/admin";
 
 // مسیرهایی که بدون توکن در دسترس‌اند. بقیه‌ی /api/* نیاز به ورود دارند.
 const PUBLIC_ROUTES = new Set([
@@ -63,6 +69,26 @@ export default {
         const auth = await authenticate(request, env);
         if (auth instanceof Response) return auth;
         // auth همان userId است؛ در گام ۲ برای چک دسترسی استفاده می‌شود
+      }
+
+      // ---- مسیرهای پنل مدیریت کلی (/api/admin/*) ----
+      if (request.method === "GET" && path === "/api/admin/bootstrap") {
+        return handleAdminBootstrap(request, env);
+      }
+
+      const adminDeleteUserMatch = path.match(/^\/api\/admin\/users\/([^/]+)$/);
+      if (request.method === "DELETE" && adminDeleteUserMatch) {
+        return handleAdminDeleteUser(request, env, adminDeleteUserMatch[1]);
+      }
+
+      const adminDeleteGroupMatch = path.match(/^\/api\/admin\/groups\/([^/]+)$/);
+      if (request.method === "DELETE" && adminDeleteGroupMatch) {
+        return handleAdminDeleteGroup(request, env, adminDeleteGroupMatch[1]);
+      }
+
+      const adminDeleteExpenseMatch = path.match(/^\/api\/admin\/expenses\/([^/]+)$/);
+      if (request.method === "DELETE" && adminDeleteExpenseMatch) {
+        return handleAdminDeleteExpense(request, env, adminDeleteExpenseMatch[1]);
       }
 
       // ---- مسیرهای کاربر واردشده (/api/me/*) ----

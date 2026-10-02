@@ -135,6 +135,9 @@ class User {
     return List<String>.from(friendIds);
   }
 
+  /// آیا کاربر ادمین کل است؟
+  bool get isSuperAdmin => email.trim().toLowerCase() == 'mhsyny293@gmail.com';
+
   /// بررسی اینکه کاربر معتبر است
   bool get isValid => name.isNotEmpty && email.isNotEmpty && id.isNotEmpty;
 
