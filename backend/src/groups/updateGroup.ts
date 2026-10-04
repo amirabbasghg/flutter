@@ -1,6 +1,6 @@
 import { Env } from "../types";
 import { response } from "../utils/response";
-import { requireGroupCreator, groupExists } from "../auth/authorization";
+import { requireGroupMember, groupExists } from "../auth/authorization";
 
 export async function handleUpdateGroup(
   request: Request,
@@ -8,10 +8,9 @@ export async function handleUpdateGroup(
   groupId: string
 ): Promise<Response> {
   try {
-    // فقط سازنده گروه می‌تواند نام یا اعضا را تغییر دهد
-    const authorized = await requireGroupCreator(request, env, groupId);
-    if (authorized instanceof Response) {
-      return authorized;
+    const userId = await requireGroupMember(request, env, groupId);
+    if (userId instanceof Response) {
+      return userId;
     }
 
     const body = await request.json<{
@@ -19,9 +18,54 @@ export async function handleUpdateGroup(
       memberIds?: string[];
     }>();
 
-    // بررسی وجود گروه
-    if (!(await groupExists(env, groupId))) {
+    // گرفتن گروه و اعضای فعلی
+    const group = await env.expense_app_db
+      .prepare(`
+        SELECT id, name, created_by
+        FROM groups
+        WHERE id = ?
+      `)
+      .bind(groupId)
+      .first<{ id: string; name: string; created_by: string }>();
+
+    if (!group) {
       return response({ error: "Group not found" }, 404);
+    }
+
+    const isCreator = userId === group.created_by;
+
+    // کاربران عادی نمی‌توانند نام گروه را تغییر دهند
+    if (body.name !== undefined && body.name.trim() !== group.name) {
+      if (!isCreator) {
+        return response({ error: "Only group creator can rename group" }, 403);
+      }
+    }
+
+    // بررسی تغییرات اعضا
+    if (body.memberIds !== undefined) {
+      const currentMembersResult = await env.expense_app_db
+        .prepare(`
+          SELECT user_id
+          FROM group_members
+          WHERE group_id = ?
+        `)
+        .bind(groupId)
+        .all<{ user_id: string }>();
+
+      const currentMemberIds = currentMembersResult.results.map((m) => m.user_id);
+      const newMemberIds = [...new Set(body.memberIds)];
+
+      // اگر کاربر سازنده نیست، نباید بقیه اعضا را حذف کند
+      if (!isCreator) {
+        for (const existingId of currentMemberIds) {
+          if (!newMemberIds.includes(existingId) && existingId !== userId) {
+            return response(
+              { error: "Only group creator can remove other members" },
+              403
+            );
+          }
+        }
+      }
     }
 
     // در صورت ارسال name، نام گروه را تغییر می‌دهیم
@@ -47,20 +91,6 @@ export async function handleUpdateGroup(
     // در صورت ارسال memberIds، اعضای گروه را به‌روزرسانی می‌کنیم
     if (body.memberIds !== undefined) {
       const memberIds = [...new Set(body.memberIds)];
-
-      // گرفتن سازنده گروه
-      const group = await env.expense_app_db
-        .prepare(`
-          SELECT created_by
-          FROM groups
-          WHERE id = ?
-        `)
-        .bind(groupId)
-        .first<{ created_by: string }>();
-
-      if (!group) {
-        return response({ error: "Group not found" }, 404);
-      }
 
       // سازنده گروه نباید از اعضای گروه حذف شود
       if (!memberIds.includes(group.created_by)) {

@@ -20,7 +20,8 @@
   // هیچ‌کدام محرمانه نیستند، پس می‌توانند در همین فایل بمانند.
   "vars": {
     "GOOGLE_CLIENT_ID": "277889096548-56031v6p9lomnmifk7brqhm09733mpai.apps.googleusercontent.com,177838948520-boe8qvmh1qcludvfcjdqhcm4fb8opujm.apps.googleusercontent.com",
-    "ENVIRONMENT": "production"
+    "ENVIRONMENT": "production",
+    "ADMIN_EMAIL": "mhsyny293@gmail.com"
   },
 
   "d1_databases": [
@@ -37,7 +38,8 @@
 
       "vars": {
         "GOOGLE_CLIENT_ID": "277889096548-56031v6p9lomnmifk7brqhm09733mpai.apps.googleusercontent.com,177838948520-boe8qvmh1qcludvfcjdqhcm4fb8opujm.apps.googleusercontent.com",
-        "ENVIRONMENT": "development"
+        "ENVIRONMENT": "development",
+        "ADMIN_EMAIL": "mhsyny293@gmail.com"
       },
 
       "d1_databases": [

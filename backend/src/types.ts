@@ -6,6 +6,7 @@ export interface Env {
   PBKDF2_ITERATIONS?: string;
   // اگر "production" باشد، devResetToken در پاسخ forgot برگردانده نمی‌شود.
   ENVIRONMENT?: string;
+  ADMIN_EMAIL?: string;
 
   // secrets (wrangler secret put / .dev.vars)
   JWT_SECRET: string;

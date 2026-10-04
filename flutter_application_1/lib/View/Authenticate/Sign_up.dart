@@ -34,9 +34,19 @@ class _SignUpState extends State<SignUp> {
       return true;
     } on ApiException catch (e) {
       if (mounted) {
-        _showErrorSnackbar(
-          e.statusCode == 409 ? 'این ایمیل قبلاً ثبت شده است' : e.message,
-        );
+        String msg;
+        if (e.message == 'google-account-exists') {
+          msg = 'این ایمیل با گوگل ثبت شده است، لطفاً با دکمه ورود با گوگل وارد شوید';
+        } else if (e.message == 'email-already-in-use') {
+          msg = 'این ایمیل قبلاً ثبت شده است';
+        } else if (e.message == 'display-name-taken') {
+          msg = 'این نام‌کاربری قبلاً استفاده شده است';
+        } else if (e.statusCode == 409) {
+          msg = 'این ایمیل یا نام‌کاربری قبلاً ثبت شده است';
+        } else {
+          msg = e.message;
+        }
+        _showErrorSnackbar(msg);
       }
       return false;
     } catch (_) {

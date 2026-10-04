@@ -59,7 +59,7 @@ export async function handleUpdateMe(
         .first<{ display_name: string }>();
 
       if (taken) {
-        return response({ error: "Display name is already taken" }, 409);
+        return response({ error: "display-name-taken" }, 409);
       }
     }
 
@@ -108,9 +108,25 @@ export async function handleUpdateMe(
           )
           .bind(newName!.toLowerCase(), newName!, now),
       );
+    } else if (newName !== undefined && newName !== currentName?.name) {
+      // تغییر فقط در حروف کوچک/بزرگ (مثلاً john به John)
+      statements.push(
+        env.expense_app_db
+          .prepare(
+            `UPDATE display_names SET display_name = ? WHERE display_name_lower = ?`,
+          )
+          .bind(newName, newName.toLowerCase()),
+      );
     }
 
-    await env.expense_app_db.batch(statements);
+    try {
+      await env.expense_app_db.batch(statements);
+    } catch (error) {
+      if (String(error).includes("UNIQUE")) {
+        return response({ error: "display-name-taken" }, 409);
+      }
+      throw error;
+    }
 
     const user = await env.expense_app_db
       .prepare(`

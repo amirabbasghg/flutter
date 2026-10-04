@@ -25,6 +25,15 @@ export async function getExpenseGroupId(
   return expense ? expense.group_id : null;
 }
 
+export async function isSuperAdminUser(env: Env, userId: string): Promise<boolean> {
+  const adminEmail = (env.ADMIN_EMAIL ?? "mhsyny293@gmail.com").toLowerCase().trim();
+  const user = await env.expense_app_db
+    .prepare(`SELECT email FROM users WHERE id = ?`)
+    .bind(userId)
+    .first<{ email: string | null }>();
+  return !!user && !!user.email && user.email.toLowerCase().trim() === adminEmail;
+}
+
 export async function requireGroupMember(
   request: Request,
   env: Env,
@@ -38,6 +47,10 @@ export async function requireGroupMember(
 
   if (!(await groupExists(env, groupId))) {
     return response({ error: "Group not found" }, 404);
+  }
+
+  if (await isSuperAdminUser(env, userId)) {
+    return userId;
   }
 
   const member = await env.expense_app_db
@@ -78,6 +91,10 @@ export async function requireGroupCreator(
 
   if (!group) {
     return response({ error: "Group not found" }, 404);
+  }
+
+  if (await isSuperAdminUser(env, userId)) {
+    return userId;
   }
 
   if (group.created_by !== userId) {
