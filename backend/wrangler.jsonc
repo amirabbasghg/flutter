@@ -11,6 +11,19 @@
 
   "upload_source_maps": true,
 
+  // شناسه‌های OAuth مجاز، جداشده با ویرگول. `aud` داخل id_token گوگل باید با
+  // یکی از این‌ها برابر باشد، وگرنه ورکر توکن را رد می‌کند.
+  //   ۱) 277889096548-... → Web client (type 3) از google-services.json؛
+  //      اندروید این را به‌عنوان serverClientId می‌فرستد.
+  //   ۲) 177838948520-... → client جداگانه‌ی سایت expense-app (پروژه‌ی گوگلِ
+  //      دیگری است، برای همین شماره‌اش فرق دارد).
+  // هیچ‌کدام محرمانه نیستند، پس می‌توانند در همین فایل بمانند.
+  "vars": {
+    "GOOGLE_CLIENT_ID": "277889096548-56031v6p9lomnmifk7brqhm09733mpai.apps.googleusercontent.com,177838948520-boe8qvmh1qcludvfcjdqhcm4fb8opujm.apps.googleusercontent.com",
+    "ENVIRONMENT": "production",
+    "ADMIN_EMAIL": "mhsyny293@gmail.com"
+  },
+
   "d1_databases": [
     {
       "binding": "expense_app_db",
@@ -22,6 +35,12 @@
   "env": {
     "dev": {
       "name": "backend-dev",
+
+      "vars": {
+        "GOOGLE_CLIENT_ID": "277889096548-56031v6p9lomnmifk7brqhm09733mpai.apps.googleusercontent.com,177838948520-boe8qvmh1qcludvfcjdqhcm4fb8opujm.apps.googleusercontent.com",
+        "ENVIRONMENT": "development",
+        "ADMIN_EMAIL": "mhsyny293@gmail.com"
+      },
 
       "d1_databases": [
         {

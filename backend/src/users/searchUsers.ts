@@ -2,6 +2,11 @@ import { Env } from "../types";
 import { response } from "../utils/response";
 import { authenticate } from "../auth/middleware";
 
+// حداکثر تعداد کاربری که در یک درخواست برمی‌گردد. اپ تب «پیدا کردن» را با
+// یک فهرستِ کامل پر می‌کند و جست‌وجو را محلی روی همین فهرست انجام می‌دهد
+// (دقیقاً رفتار نسخه‌ی قدیمیِ Firestore)، پس اینجا سقفی سخاوتمندانه کافی است.
+const MAX_RESULTS = 500;
+
 export async function handleSearchUsers(
   request: Request,
   env: Env,
@@ -15,40 +20,48 @@ export async function handleSearchUsers(
   const url = new URL(request.url);
   const query = (url.searchParams.get("q") ?? "").trim();
 
-  if (query.length < 2) {
-    return response({ error: "q must contain at least 2 characters" }, 400);
-  }
-
+  // بدون q یعنی «همه‌ی کاربران را بده» — اپ خودش فیلتر می‌کند. با q یعنی
+  // جست‌وجوی سمت سرور (برای وقتی فهرست محلی هنوز نرسیده یا خیلی بزرگ است).
+  const hasQuery = query.length > 0;
   const pattern = `%${query}%`;
 
-  const users = await env.expense_app_db
-    .prepare(`
-      SELECT id, name, email, photo_url, account_number
-      FROM users
-      WHERE id != ?
-        AND (
-          name LIKE ? COLLATE NOCASE
-          OR email LIKE ? COLLATE NOCASE
-        )
-      ORDER BY name COLLATE NOCASE
-      LIMIT 20
-    `)
-    .bind(authenticatedUserId, pattern, pattern)
-    .all<{
-      id: string;
-      name: string;
-      email: string | null;
-      photo_url: string | null;
-      account_number: string | null;
-    }>();
+  // جست‌وجو فقط روی نام نمایشی. ایمیل عمداً جست‌وجو/برگشت داده نمی‌شود: با آن
+  // می‌شد وجود یک ایمیل مشخص در سیستم را تأیید کرد.
+  const stmt = hasQuery
+    ? env.expense_app_db
+        .prepare(`
+          SELECT id, name, photo_url
+          FROM users
+          WHERE id != ? AND name LIKE ? COLLATE NOCASE
+          ORDER BY name COLLATE NOCASE
+          LIMIT ${MAX_RESULTS}
+        `)
+        .bind(authenticatedUserId, pattern)
+    : env.expense_app_db
+        .prepare(`
+          SELECT id, name, photo_url
+          FROM users
+          WHERE id != ?
+          ORDER BY name COLLATE NOCASE
+          LIMIT ${MAX_RESULTS}
+        `)
+        .bind(authenticatedUserId);
 
+  const users = await stmt.all<{
+    id: string;
+    name: string;
+    photo_url: string | null;
+  }>();
+
+  // ایمیل و شماره کارت در نتیجه‌ی جست‌وجو برنمی‌گردند — این‌ها فقط برای
+  // دوستان و هم‌گروهی‌ها (/api/me/contacts) در دسترس‌اند.
   return response(
     users.results.map((user) => ({
       id: user.id,
       name: user.name,
-      email: user.email ?? "",
+      email: "",
       photoURL: user.photo_url,
-      accountNumber: user.account_number,
+      accountNumber: null,
     })),
   );
 }

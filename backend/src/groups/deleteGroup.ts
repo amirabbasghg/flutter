@@ -1,5 +1,6 @@
 import { Env } from "../types";
 import { response } from "../utils/response";
+import { requireGroupCreator, groupExists } from "../auth/authorization";
 
 export async function handleDeleteGroup(
   request: Request,
@@ -7,17 +8,14 @@ export async function handleDeleteGroup(
   groupId: string
 ): Promise<Response> {
   try {
-    // بررسی وجود گروه
-    const group = await env.expense_app_db
-      .prepare(`
-        SELECT id
-        FROM groups
-        WHERE id = ?
-      `)
-      .bind(groupId)
-      .first<{ id: string }>();
+    // فقط سازنده گروه می‌تواند گروه را حذف کند
+    const authorized = await requireGroupCreator(request, env, groupId);
+    if (authorized instanceof Response) {
+      return authorized;
+    }
 
-    if (!group) {
+    // بررسی وجود گروه
+    if (!(await groupExists(env, groupId))) {
       return response({ error: "Group not found" }, 404);
     }
 

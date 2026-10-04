@@ -40,6 +40,29 @@ export async function handleUpdateMe(
       return response({ error: "User not found" }, 404);
     }
 
+    // تغییر نام باید جدول display_names را هم جابه‌جا کند، وگرنه نام قدیمی
+    // برای همیشه اشغال می‌ماند و نام جدید می‌تواند با کاربر دیگری تصادم کند.
+    const currentName = await env.expense_app_db
+      .prepare(`SELECT name FROM users WHERE id = ?`)
+      .bind(userId)
+      .first<{ name: string }>();
+
+    const newName = body.name?.trim();
+    const renaming =
+      newName !== undefined &&
+      newName.toLowerCase() !== (currentName?.name ?? "").toLowerCase();
+
+    if (renaming) {
+      const taken = await env.expense_app_db
+        .prepare(`SELECT display_name FROM display_names WHERE display_name_lower = ?`)
+        .bind(newName!.toLowerCase())
+        .first<{ display_name: string }>();
+
+      if (taken) {
+        return response({ error: "display-name-taken" }, 409);
+      }
+    }
+
     const fields: string[] = [];
     const values: unknown[] = [];
 
@@ -62,14 +85,48 @@ export async function handleUpdateMe(
     values.push(new Date().toISOString());
     values.push(userId);
 
-    await env.expense_app_db
-      .prepare(`
-        UPDATE users
-        SET ${fields.join(", ")}
-        WHERE id = ?
-      `)
-      .bind(...values)
-      .run();
+    const statements = [
+      env.expense_app_db
+        .prepare(`
+          UPDATE users
+          SET ${fields.join(", ")}
+          WHERE id = ?
+        `)
+        .bind(...values),
+    ];
+
+    if (renaming) {
+      const now = new Date().toISOString();
+      statements.push(
+        env.expense_app_db
+          .prepare(`DELETE FROM display_names WHERE display_name_lower = ?`)
+          .bind((currentName?.name ?? "").toLowerCase()),
+        env.expense_app_db
+          .prepare(
+            `INSERT INTO display_names (display_name_lower, display_name, created_at)
+             VALUES (?, ?, ?)`,
+          )
+          .bind(newName!.toLowerCase(), newName!, now),
+      );
+    } else if (newName !== undefined && newName !== currentName?.name) {
+      // تغییر فقط در حروف کوچک/بزرگ (مثلاً john به John)
+      statements.push(
+        env.expense_app_db
+          .prepare(
+            `UPDATE display_names SET display_name = ? WHERE display_name_lower = ?`,
+          )
+          .bind(newName, newName.toLowerCase()),
+      );
+    }
+
+    try {
+      await env.expense_app_db.batch(statements);
+    } catch (error) {
+      if (String(error).includes("UNIQUE")) {
+        return response({ error: "display-name-taken" }, 409);
+      }
+      throw error;
+    }
 
     const user = await env.expense_app_db
       .prepare(`

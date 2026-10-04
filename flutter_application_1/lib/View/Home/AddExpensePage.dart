@@ -10,10 +10,10 @@ import 'package:namer_app/model/Group.dart';
 import 'package:namer_app/model/Expense.dart';
 import 'package:namer_app/model/WordPairModel.dart';
 import 'package:namer_app/model/User.dart';
+import '../../Services/Api.dart';
 import '../../ViewModel/AppStateVM.dart';
 import '../../model/ExpenseManager.dart';
 import 'package:persian_number_utility/persian_number_utility.dart';
-import 'package:flutter_persian_calendar/flutter_persian_calendar.dart';
 
 import 'ServicesScreen.dart';
 
@@ -125,6 +125,52 @@ class _AddExpensePageState extends State<AddExpensePage> {
     end: Alignment.bottomLeft,
   );
 
+  /// دکوراسیون مشترک فیلدهای فرم.
+  ///
+  /// ⚠️ قبلاً هر فیلد fillColor را صریحاً Colors.green[50] (سبزِ خیلی روشن)
+  /// می‌گذاشت. متنِ تایپ‌شده داخل TextFormField رنگش را از تمِ صفحه می‌گیرد؛
+  /// در دارک مود آن رنگ تقریباً سفید است، پس روی پس‌زمینه‌ی سبزِ روشنِ ثابت
+  /// عملاً نامرئی می‌شد (دقیقاً همان چیزی که گزارش شد: «اعداد و متن در حالت
+  /// تیره دیده نمی‌شوند»). حالا fillColor بر اساس تمِ فعلی محاسبه می‌شود، پس
+  /// در هر دو حالت پس‌زمینه با متنِ پیش‌فرض تضاد کافی دارد.
+  InputDecoration _fieldDecoration(
+    BuildContext context, {
+    required String label,
+    required IconData icon,
+  }) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final accent = isDark ? Colors.green.shade300 : Colors.green.shade700;
+    final fill = theme.colorScheme.primary.withValues(alpha: isDark ? 0.14 : 0.08);
+
+    return InputDecoration(
+      labelText: label,
+      filled: true,
+      fillColor: fill,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: accent, width: 2.0),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: accent, width: 2.0),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: accent, width: 2.5),
+      ),
+      prefixIcon: Icon(icon, color: accent),
+    );
+  }
+
+  /// پس‌زمینه‌ی ملایمِ سبز برای کارت‌ها — در دارک مود کمی پررنگ‌تر، چون پشت یک
+  /// surface تیره alpha یکسان کم‌رنگ‌تر به نظر می‌رسد.
+  Color _tint(BuildContext context, {double light = 0.08, double dark = 0.16}) {
+    final theme = Theme.of(context);
+    return theme.colorScheme.primary
+        .withValues(alpha: theme.brightness == Brightness.dark ? dark : light);
+  }
+
   @override
   Widget build(BuildContext context) {
     final appStateVM = context.watch<AppStateVM>();
@@ -147,7 +193,7 @@ class _AddExpensePageState extends State<AddExpensePage> {
               // کارت اطلاعات
               Card(
                 elevation: 3,
-                color: Colors.green[50],
+                color: _tint(context),
                 child: Padding(
                   padding: const EdgeInsets.all(12.0),
                   child: Column(
@@ -184,32 +230,10 @@ class _AddExpensePageState extends State<AddExpensePage> {
                     );
                   }),
                 ],
-                decoration: InputDecoration(
-                  labelText: 'مبلغ (تومان)',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: Colors.green, // حاشیه سبز پررنگ
-                      width: 2.0,
-                    ),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: Colors.green, // حاشیه سبز پررنگ
-                      width: 2.0,
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: Colors.green.shade700, // حاشیه سبز تیره هنگام فوکوس
-                      width: 2.5,
-                    ),
-                  ),
-                  prefixIcon: Icon(Icons.attach_money, color: Colors.green),
-                  filled: true,
-                  fillColor: Colors.green[50],
+                decoration: _fieldDecoration(
+                  context,
+                  label: 'مبلغ (تومان)',
+                  icon: Icons.attach_money,
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) return 'لطفا مبلغ را وارد کنید';
@@ -231,32 +255,10 @@ class _AddExpensePageState extends State<AddExpensePage> {
               // فیلد توضیحات
               TextFormField(
                 controller: _descriptionController,
-                decoration: InputDecoration(
-                  labelText: 'توضیحات',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: Colors.green,
-                      width: 2.0,
-                    ),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: Colors.green,
-                      width: 2.0,
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: Colors.green.shade700,
-                      width: 2.5,
-                    ),
-                  ),
-                  prefixIcon: Icon(Icons.description, color: Colors.green),
-                  filled: true,
-                  fillColor: Colors.green[50],
+                decoration: _fieldDecoration(
+                  context,
+                  label: 'توضیحات',
+                  icon: Icons.description,
                 ),
                 maxLines: 2,
               ),
@@ -265,32 +267,10 @@ class _AddExpensePageState extends State<AddExpensePage> {
               // انتخاب گروه
               DropdownButtonFormField<Group>(
                 value: _selectedGroup,
-                decoration: InputDecoration(
-                  labelText: 'گروه',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: Colors.green,
-                      width: 2.0,
-                    ),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: Colors.green,
-                      width: 2.0,
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: Colors.green.shade700,
-                      width: 2.5,
-                    ),
-                  ),
-                  prefixIcon: Icon(Icons.group, color: Colors.green),
-                  filled: true,
-                  fillColor: Colors.green[50],
+                decoration: _fieldDecoration(
+                  context,
+                  label: 'گروه',
+                  icon: Icons.group,
                 ),
                 items: appStateVM.getCurrentUserGroups().map((Group group) {
                   return DropdownMenuItem<Group>(
@@ -314,32 +294,10 @@ class _AddExpensePageState extends State<AddExpensePage> {
               if (_selectedGroup != null)
                 DropdownButtonFormField<User>(
                   value: _selectedPayer,
-                  decoration: InputDecoration(
-                    labelText: 'پرداخت کننده',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(
-                        color: Colors.green,
-                        width: 2.0,
-                      ),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(
-                        color: Colors.green,
-                        width: 2.0,
-                      ),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(
-                        color: Colors.green.shade700,
-                        width: 2.5,
-                      ),
-                    ),
-                    prefixIcon: Icon(Icons.person, color: Colors.green),
-                    filled: true,
-                    fillColor: Colors.green[50],
+                  decoration: _fieldDecoration(
+                    context,
+                    label: 'پرداخت کننده',
+                    icon: Icons.person,
                   ),
                   items: _selectedGroup!.getMembers(appStateVM.members).map((User user) {
                     return DropdownMenuItem<User>(
@@ -363,7 +321,7 @@ class _AddExpensePageState extends State<AddExpensePage> {
                   children: [
                     Text(
                       '👥 دریافت کنندگان:',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.grey[700]),
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
                     ),
                     SizedBox(height: 8),
                     Row(
@@ -382,7 +340,7 @@ class _AddExpensePageState extends State<AddExpensePage> {
                                 : null,
                             color: _selectedReceivers.length == _selectedGroup!.getMembers(appStateVM.members).length
                                 ? null
-                                : Colors.white,
+                                : Theme.of(context).cardColor,
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
                               color: Colors.green,
@@ -443,7 +401,7 @@ class _AddExpensePageState extends State<AddExpensePage> {
                         child: Container(
                           decoration: BoxDecoration(
                             gradient: isSelected ? _greenGradient : null,
-                            color: isSelected ? null : Colors.white,
+                            color: isSelected ? null : Theme.of(context).cardColor,
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: CheckboxListTile(
@@ -453,7 +411,9 @@ class _AddExpensePageState extends State<AddExpensePage> {
                             title: Text(
                               user.name,
                               style: TextStyle(
-                                color: isSelected ? Colors.white : Colors.black87,
+                                color: isSelected
+                                    ? Colors.white
+                                    : Theme.of(context).colorScheme.onSurface,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -485,7 +445,7 @@ class _AddExpensePageState extends State<AddExpensePage> {
               // انتخاب نوع تقسیم
               if (_selectedReceivers.isNotEmpty)
                 Card(
-                  color: Colors.green[50],
+                  color: _tint(context),
                   elevation: 2,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -545,7 +505,7 @@ class _AddExpensePageState extends State<AddExpensePage> {
                     SizedBox(height: 16),
                     Text(
                       '💰 مبلغ هر نفر:',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.grey[700]),
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
                     ),
                     SizedBox(height: 8),
                     ..._selectedReceivers.map((user) {
@@ -573,32 +533,13 @@ class _AddExpensePageState extends State<AddExpensePage> {
                                     );
                                   }),
                                 ],
-                                decoration: InputDecoration(
-                                  filled: true,
-                                  fillColor: Colors.green[50],
-                                  labelText: 'مبلغ (تومان)',
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(15),
-                                    borderSide: BorderSide(
-                                      color: Colors.green,
-                                      width: 2.0,
-                                    ),
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(15),
-                                    borderSide: BorderSide(
-                                      color: Colors.green,
-                                      width: 2.0,
-                                    ),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(15),
-                                    borderSide: BorderSide(
-                                      color: Colors.green.shade700,
-                                      width: 2.5,
-                                    ),
-                                  ),
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                decoration: _fieldDecoration(
+                                  context,
+                                  label: 'مبلغ (تومان)',
+                                  icon: Icons.attach_money,
+                                ).copyWith(
+                                  contentPadding:
+                                      EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                 ),
                                 validator: (value) {
                                   if (value == null || value.isEmpty) return 'لطفا مبلغ را وارد کنید';
@@ -627,7 +568,7 @@ class _AddExpensePageState extends State<AddExpensePage> {
 
               // انتخاب تاریخ
               Card(
-                color: Colors.green[50],
+                color: _tint(context),
                 elevation: 2,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -704,26 +645,26 @@ class _AddExpensePageState extends State<AddExpensePage> {
 
       final isValid = customTotal == totalAmount;
 
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      final tone = isValid ? Colors.green : Colors.red;
+
       return Container(
         padding: EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: isValid ? Colors.green[50] : Colors.red[50],
+          color: tone.withValues(alpha: isDark ? 0.18 : 0.08),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isValid ? Colors.green : Colors.red,
-            width: 2.0,
-          ),
+          border: Border.all(color: tone, width: 2.0),
         ),
         child: Row(
           children: [
-            Icon(isValid ? Icons.check_circle : Icons.error, color: isValid ? Colors.green : Colors.red),
+            Icon(isValid ? Icons.check_circle : Icons.error, color: tone),
             SizedBox(width: 8),
             Expanded(
               child: Text(
                 isValid
                     ? '✅ مجموع مبالغ صحیح است (${NumberFormat('#,###').format(customTotal).toPersianDigit()} تومان)'
                     : '❌ مجموع مبالغ باید ${NumberFormat('#,###').format(totalAmount).toPersianDigit()} تومان باشد (حالا: ${NumberFormat('#,###').format(customTotal).toPersianDigit()} تومان)',
-                style: TextStyle(color: isValid ? Colors.green : Colors.red),
+                style: TextStyle(color: tone),
               ),
             ),
           ],
@@ -733,7 +674,7 @@ class _AddExpensePageState extends State<AddExpensePage> {
     return SizedBox();
   }
 
-  void _addExpense(AppStateVM appStateVM) {
+  Future<void> _addExpense(AppStateVM appStateVM) async {
     if (_formKey.currentState!.validate()) {
       if (_selectedGroup == null || _selectedPayer == null || _selectedReceivers.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -788,7 +729,22 @@ class _AddExpensePageState extends State<AddExpensePage> {
         description: _descriptionController.text,
       );
 
-      appStateVM.addExpenseToGroup(_selectedGroup!, expense);
+      // ثبت روی سرور (Cloudflare D1). قبلاً Firestore بود و خطا را قورت می‌داد؛
+      // حالا اگر سرور قبول نکند باید به کاربر گفته شود و فرم پاک نشود.
+      try {
+        await appStateVM.addExpenseToGroup(_selectedGroup!, expense);
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e is ApiException ? e.message : 'ثبت هزینه انجام نشد'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      if (!mounted) return;
 
       // نمایش خلاصه
       _showExpenseSummary(expense, appStateVM.members);
@@ -870,55 +826,23 @@ class _AddExpensePageState extends State<AddExpensePage> {
     return '${date.day.toString().toPersianDigit()} ${monthNames[date.month - 1]} ${date.year.toString().toPersianDigit()}';
   }
 
-  // متد اصلاح شده برای نمایش تقویم
+  // متد انتخاب تاریخ.
+  //
+  // ⚠️ قبلاً اینجا دیالوگ دست‌ساز روی ویجت PersianCalendar (پکیج
+  // flutter_persian_calendar) بود که دو باگ داشت: ۱) دکمه‌ی «لغو» دقیقاً کار
+  // «تأیید» را می‌کرد (هر دو فقط Navigator.pop می‌زدند)، ۲) خودِ پکیج روز
+  // انتخاب‌شده را با شماره‌ی ماه مقایسه می‌کرد (`selectedDate.month ==
+  // dayIndex + 1`)، پس رنگ‌آمیزی روز انتخابی اشتباه بود و کاربر فکر می‌کرد لمسش
+  // اثر نکرده — دقیقاً همان «انتخاب روز خراب است» که گزارش شد.
+  // showPersianDatePicker از پکیج persian_datetime_picker هیچ‌کدام از این
+  // مشکلات را ندارد.
   Future<Jalali?> _showPersianCalendarPicker(BuildContext context) async {
-    Jalali? selectedDate = _selectedJalali;
-
-    await showDialog(
+    return showPersianDatePicker(
       context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-          child: PersianCalendar(
-            height: 380.0,
-            initialDate: _selectedJalali,
-            startingDate: Jalali(1400, 1, 1),
-            endingDate: Jalali(1450, 12, 29),
-            onDateChanged: (Jalali newDate) {
-              selectedDate = newDate;
-            },
-            primaryColor: Colors.green,
-            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-            textStyle: TextStyle(
-              fontFamily: 'Vazir',
-            ),
-            confirmButton: Container(
-              padding: EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                      },
-                      child: Text('لغو'),
-                    ),
-                  ),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                      },
-                      child: Text('تأیید'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
+      initialDate: _selectedJalali,
+      firstDate: Jalali(1400, 1, 1),
+      lastDate: Jalali(1450, 12, 29),
+      locale: const Locale('fa'),
     );
-
-    return selectedDate;
   }
 }

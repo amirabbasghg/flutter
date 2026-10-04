@@ -1,5 +1,6 @@
 import { Env } from "../types";
 import { response } from "../utils/response";
+import { requireGroupMember, getExpenseGroupId } from "../auth/authorization";
 
 export async function handleGetExpense(
   request: Request,
@@ -7,6 +8,16 @@ export async function handleGetExpense(
   expenseId: string
 ): Promise<Response> {
   try {
+    // فقط اعضای گروه آن هزینه می‌توانند جزئیاتش را ببینند
+    const expenseGroupId = await getExpenseGroupId(env, expenseId);
+    if (expenseGroupId === null) {
+      return response({ error: "Expense not found" }, 404);
+    }
+    const authorized = await requireGroupMember(request, env, expenseGroupId);
+    if (authorized instanceof Response) {
+      return authorized;
+    }
+
     // دریافت Expense
     const expense = await env.expense_app_db
       .prepare(`

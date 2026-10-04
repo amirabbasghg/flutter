@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 import '../../model/Group.dart';
+import '../../Services/Api.dart';
 import '../../ViewModel/AppStateVM.dart';
 import 'SelectMembersPage.dart';
 
@@ -59,7 +60,7 @@ class _GroupPageState extends State<GroupPage> {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 18,
-                      color: Colors.grey[600],
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
 
@@ -89,7 +90,7 @@ class _GroupPageState extends State<GroupPage> {
                     ),
                     subtitle: Text(
                       '${group.memberCount} عضو',
-                      style: TextStyle(color: Colors.grey[600]),
+                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
                     ),
                     trailing: group.createdBy == (appStateVM.currentUser?.id) ? IconButton(
                       icon: Icon(Icons.delete, color: Colors.red),
@@ -128,11 +129,24 @@ class _GroupPageState extends State<GroupPage> {
               child: Text('لغو'),
             ),
             TextButton(
-              onPressed: () {
-                appStateVM.removeGroup(group);
-                Navigator.of(context).pop();
-
-                ScaffoldMessenger.of(context).showSnackBar(
+              onPressed: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                final navigator = Navigator.of(context);
+                try {
+                  await appStateVM.removeGroup(group);
+                } catch (e) {
+                  navigator.pop();
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text(
+                          e is ApiException ? e.message : 'حذف گروه انجام نشد'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+                navigator.pop();
+                messenger.showSnackBar(
                   SnackBar(
                     content: Text('گروه "${group.name}" حذف شد'),
                     backgroundColor: Colors.red,

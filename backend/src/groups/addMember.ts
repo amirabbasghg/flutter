@@ -1,5 +1,6 @@
 import { Env } from "../types";
 import { response } from "../utils/response";
+import { requireGroupMember, groupExists } from "../auth/authorization";
 
 export async function handleAddMember(
   request: Request,
@@ -7,6 +8,12 @@ export async function handleAddMember(
   groupId: string
 ): Promise<Response> {
   try {
+    // هر عضوی از گروه می‌تواند عضو جدید اضافه کند
+    const authorized = await requireGroupMember(request, env, groupId);
+    if (authorized instanceof Response) {
+      return authorized;
+    }
+
     const body = await request.json<{
       userId?: string;
     }>();
@@ -16,16 +23,7 @@ export async function handleAddMember(
     }
 
     // بررسی وجود گروه
-    const group = await env.expense_app_db
-      .prepare(`
-        SELECT id
-        FROM groups
-        WHERE id = ?
-      `)
-      .bind(groupId)
-      .first<{ id: string }>();
-
-    if (!group) {
+    if (!(await groupExists(env, groupId))) {
       return response({ error: "Group not found" }, 404);
     }
 

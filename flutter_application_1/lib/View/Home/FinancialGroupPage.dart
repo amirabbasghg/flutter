@@ -22,7 +22,7 @@ class _FinancialGroupPage extends State<FinancialGroupPage> {
 
     if (currentUser == null) {
       return Scaffold(
-        backgroundColor: Colors.grey.shade50,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -78,7 +78,7 @@ class _FinancialGroupPage extends State<FinancialGroupPage> {
           SizedBox(height: 16),
           Text(
             'هنوز در گروهی عضو نیستید',
-            style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+            style: TextStyle(fontSize: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
           SizedBox(height: 8),
           Text(
@@ -345,26 +345,25 @@ class _FinancialGroupPage extends State<FinancialGroupPage> {
             ),
             SizedBox(height: 16),
 
-            // دکمه اضافه کردن عضو جدید (فقط برای مالک)
-            if (isOwner)
-              Column(
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context); // بستن bottom sheet
-                      _showAddMemberDialog(appStateVM, group, currentUser);
-                    },
-                    icon: Icon(Icons.person_add, size: 18),
-                    label: Text('افزودن عضو جدید'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.pink,
-                      foregroundColor: Colors.white,
-                      minimumSize: Size(double.infinity, 40),
-                    ),
+            // دکمه اضافه کردن عضو جدید (برای همه اعضا)
+            Column(
+              children: [
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context); // بستن bottom sheet
+                    _showAddMemberDialog(appStateVM, group, currentUser);
+                  },
+                  icon: Icon(Icons.person_add, size: 18),
+                  label: Text('افزودن عضو جدید'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.pink,
+                    foregroundColor: Colors.white,
+                    minimumSize: Size(double.infinity, 40),
                   ),
-                  SizedBox(height: 16),
-                ],
-              ),
+                ),
+                SizedBox(height: 16),
+              ],
+            ),
 
             // لیست اعضا با قابلیت حذف برای مالک
             Row(
@@ -445,6 +444,23 @@ class _FinancialGroupPage extends State<FinancialGroupPage> {
                     child: Text('بستن'),
                   ),
                 ),
+                if (isOwner) ...[
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _showDeleteGroupDialog(context, appStateVM, group);
+                      },
+                      icon: Icon(Icons.delete, size: 18, color: Colors.white),
+                      label: Text('حذف گروه'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ],
@@ -459,7 +475,7 @@ class _FinancialGroupPage extends State<FinancialGroupPage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title, style: TextStyle(color: Colors.grey[600])),
+          Text(title, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           Text(
             value,
             style: TextStyle(
@@ -633,5 +649,47 @@ class _FinancialGroupPage extends State<FinancialGroupPage> {
         );
       }
     }
+  }
+
+  void _showDeleteGroupDialog(BuildContext context, AppStateVM appStateVM, Group group) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('حذف گروه'),
+        content: Text('آیا از حذف گروه "${group.name}" مطمئن هستید؟'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('لغو'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              try {
+                await appStateVM.removeGroup(group);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('گروه "${group.name}" با موفقیت حذف شد'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+                setState(() {});
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('خطا در حذف گروه'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+            ),
+            child: Text('حذف', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
   }
 }

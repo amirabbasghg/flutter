@@ -4,11 +4,11 @@ import 'package:persian_datetime_picker/persian_datetime_picker.dart';
 import 'package:persian_number_utility/persian_number_utility.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import 'package:flutter_persian_calendar/flutter_persian_calendar.dart'; // اضافه شد
 
 import 'package:namer_app/model/Group.dart';
 import 'package:namer_app/model/Expense.dart';
 import 'package:namer_app/model/User.dart';
+import '../../Services/Api.dart';
 import '../../ViewModel/AppStateVM.dart';
 
 // enum برای انواع فیلتر تاریخ
@@ -46,14 +46,20 @@ class _SettlementPageState extends State<SettlementPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final appStateVM = Provider.of<AppStateVM>(context, listen: false);
       final currentUser = appStateVM.currentUser;
-      if (currentUser != null) {
-        final userGroups = appStateVM.groups.where((group) =>
-            group.memberIds.contains(currentUser.id)).toList();
+      if (currentUser == null) return;
 
-        setState(() {
-          _selectedGroupIds.addAll(userGroups.map((g) => g.id));
-        });
-      }
+      final userGroups = appStateVM.groups
+          .where((group) => group.memberIds.contains(currentUser.id))
+          .toList();
+      if (userGroups.isEmpty) return;
+
+      // ⚠️ قبلاً همه‌ی گروه‌ها یک‌جا انتخاب می‌شدند و بدهی‌ها بین گروه‌ها با هم
+      // جمع/خنثی می‌شد — یعنی «مبلغ همه‌ی گروه‌ها» در یک عدد نشان داده می‌شد.
+      // تسویه ذاتاً درون‌گروهی است، پس پیش‌فرض فقط تازه‌ترین گروه انتخاب می‌شود
+      // و کاربر در صورت نیاز از دکمه‌ی «فیلتر» بقیه را اضافه می‌کند.
+      setState(() {
+        _selectedGroupIds.add(userGroups.first.id);
+      });
     });
   }
 
@@ -66,7 +72,7 @@ class _SettlementPageState extends State<SettlementPage> {
 
     if (currentUser == null) {
       return Scaffold(
-        backgroundColor: Colors.grey.shade50,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -93,12 +99,15 @@ class _SettlementPageState extends State<SettlementPage> {
     final debtSummary = _calculateDebts(filteredExpenses, allUsers);
 
     return Theme(
+      // ⚠️ قبلاً اینجا ColorScheme.light بود که صفحه را حتی در حالت تیره هم
+      // روشن نگه می‌داشت. فقط رنگ اصلی override می‌شود، نه کل طرح‌رنگ.
       data: Theme.of(context).copyWith(
         primaryColor: _primaryColor,
-        colorScheme: ColorScheme.light(primary: _primaryColor),
+        colorScheme:
+            Theme.of(context).colorScheme.copyWith(primary: _primaryColor),
       ),
       child: Scaffold(
-        backgroundColor: Colors.grey.shade50,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         appBar: AppBar(
           title: const Text(
             '💰 تسویه حساب',
@@ -170,9 +179,9 @@ class _SettlementPageState extends State<SettlementPage> {
                     ),
                     Spacer(),
                     Text(
-                      _selectedGroupIds.isEmpty ? '${_selectedGroupIds.length.toString().toPersianDigit()} مورد ' : '${debtSummary.values.where((debt) => debt != 0).length.toString().toPersianDigit()} مورد',
+                      _selectedGroupIds.isEmpty ? '${_selectedGroupIds.length.toString().toPersianDigit()} مورد ' : '${debtSummary.values.where((debt) => !_isSettled(debt)).length.toString().toPersianDigit()} مورد',
                       style: TextStyle(
-                        color: Colors.grey.shade600,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                         fontSize: 12,
                       ),
                     ),
@@ -400,6 +409,15 @@ class _SettlementPageState extends State<SettlementPage> {
   }
 
   // محاسبه بدهی‌ها
+  /// کمتر از نیم تومان یعنی تسویه‌شده.
+  ///
+  /// سهم‌ها حالا تومانِ صحیح‌اند و جمعشان دقیقاً صفر می‌شود، ولی هزینه‌های
+  /// قدیمی با تقسیم سفارشیِ اعشاری هنوز می‌توانند ته‌مانده بسازند. بدون این
+  /// آستانه، چنین ته‌مانده‌ای به شکل «۰ تومان بدهکار است» نمایش داده می‌شد.
+  static const double _settledThreshold = 0.5;
+
+  static bool _isSettled(double value) => value.abs() < _settledThreshold;
+
   Map<User, double> _calculateDebts(List<Expense> expenses, List<User> users) {
     final debts = <User, double>{};
 
@@ -421,8 +439,13 @@ class _SettlementPageState extends State<SettlementPage> {
 
   // کارت خلاصه وضعیت
   Widget _buildSummaryCard(Map<User, double> debts, int expenseCount, BuildContext context) {
-    final totalDebt = debts.values.fold(0.0, (sum, debt) => sum + debt.abs());
-    final numberOfTransactions = debts.values.where((debt) => debt != 0).length;
+    // هر هزینه دو طرف دارد: طلبکار با +X و بدهکار با -X. جمعِ قدرمطلق‌ها دقیقاً
+    // دو برابر پولی است که باید جابه‌جا شود، پس فقط طرف مثبت جمع می‌شود.
+    final totalDebt = debts.values
+        .where((debt) => debt > 0)
+        .fold(0.0, (sum, debt) => sum + debt);
+    final numberOfTransactions =
+        debts.values.where((debt) => !_isSettled(debt)).length;
     final formatter = NumberFormat("#,###");
 
     return Container(
@@ -564,7 +587,8 @@ class _SettlementPageState extends State<SettlementPage> {
 
   // لیست بدهی‌ها
   Widget _buildDebtsList(Map<User, double> debts, List<User> users, BuildContext context) {
-    final debtEntries = debts.entries.where((entry) => entry.value != 0).toList()
+    final debtEntries =
+        debts.entries.where((entry) => !_isSettled(entry.value)).toList()
       ..sort((a, b) => b.value.abs().compareTo(a.value.abs()));
 
     if (debtEntries.isEmpty || _selectedGroupIds.isEmpty) {
@@ -592,7 +616,7 @@ class _SettlementPageState extends State<SettlementPage> {
                   ? 'هیچ بدهی یا طلبی در سیستم وجود ندارد'
                   : 'در گروه‌های انتخاب شده بدهی وجود ندارد',
               style: TextStyle(
-                color: Colors.grey.shade600,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
                 fontSize: 14,
               ),
               textAlign: TextAlign.center,
@@ -844,122 +868,52 @@ class _SettlementPageState extends State<SettlementPage> {
   }
 
   // انتخاب تاریخ شروع
+  // انتخاب تاریخ شروع
+  //
+  // ⚠️ قبلاً اینجا دیالوگ دست‌ساز روی ویجت PersianCalendar (پکیج
+  // flutter_persian_calendar) بود که دو باگ داشت: ۱) دکمه‌ی «لغو» دقیقاً کار
+  // «تأیید» را می‌کرد (هر دو فقط Navigator.pop می‌زدند)، ۲) خودِ پکیج روز
+  // انتخاب‌شده را با شماره‌ی ماه مقایسه می‌کرد (`selectedDate.month ==
+  // dayIndex + 1`)، پس رنگ‌آمیزی روز انتخابی اشتباه بود و کاربر فکر می‌کرد لمسش
+  // اثر نکرده. showPersianDatePicker از پکیج persian_datetime_picker (که از
+  // قبل در پروژه بود و FinancialReportsPage درست استفاده‌اش می‌کرد) هیچ‌کدام
+  // از این مشکلات را ندارد.
   Future<Jalali?> _selectStartDate(BuildContext context) async {
-    Jalali? selectedDate ;
-
-    await showDialog(
+    final selectedDate = await showPersianDatePicker(
       context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-          child: PersianCalendar(
-            height: 380.0,
-            initialDate: selectedDate,
-            startingDate: Jalali(1400, 1, 1),
-            endingDate: Jalali(1450, 12, 29),
-            onDateChanged: (Jalali newDate) {
-              selectedDate = newDate;
-            },
-            primaryColor: _primaryColor,
-            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-            textStyle: TextStyle(
-              fontFamily: 'Vazir',
-            ),
-            confirmButton: Container(
-              padding: EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                      },
-                      child: Text('لغو'),
-                    ),
-                  ),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        if (selectedDate != null) {
-                          setState(() {
-                            _startDate = selectedDate;
-                            if (_endDate != null && _startDate!.isAfter(_endDate!)) {
-                              _endDate = null;
-                            }
-                          });
-                        }
-                        Navigator.of(context).pop();
-                      },
-                      child: Text('تأیید'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-        );
-      },
+      initialDate: _startDate ?? Jalali.now(),
+      firstDate: Jalali(1400, 1, 1),
+      lastDate: Jalali(1450, 12, 29),
+      locale: const Locale('fa'),
     );
+
+    if (selectedDate != null) {
+      setState(() {
+        _startDate = selectedDate;
+        if (_endDate != null && _startDate!.isAfter(_endDate!)) {
+          _endDate = null;
+        }
+      });
+    }
 
     return selectedDate;
   }
 
-
   // انتخاب تاریخ پایان
   void _selectEndDate(void Function(void Function()) setState) async {
-    final initialDate = _endDate ?? _startDate ?? Jalali.now();
-    Jalali? selectedDate ;
-    await showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          return Dialog(
-            child: PersianCalendar(
-              height: 380.0,
-              initialDate: initialDate,
-              startingDate: Jalali(1400, 1, 1),
-              endingDate: Jalali(1450, 12, 29),
-              onDateChanged: (Jalali newDate) {
-                selectedDate = newDate;
-              },
-              primaryColor: _primaryColor,
-              backgroundColor: Theme
-                  .of(context)
-                  .scaffoldBackgroundColor,
-              textStyle: TextStyle(
-                fontFamily: 'Vazir',
-              ),
-              confirmButton: Container(
-                padding: EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                        },
-                        child: Text('لغو'),
-                      ),
-                    ),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          if (selectedDate != null) {
-                            setState(() {
-                              _endDate = selectedDate;
-                            });
-                          }
-                          Navigator.of(context).pop();
-                        },
-                        child: Text('تأیید'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        }
+    final selectedDate = await showPersianDatePicker(
+      context: context,
+      initialDate: _endDate ?? _startDate ?? Jalali.now(),
+      firstDate: Jalali(1400, 1, 1),
+      lastDate: Jalali(1450, 12, 29),
+      locale: const Locale('fa'),
     );
+
+    if (selectedDate != null) {
+      setState(() {
+        _endDate = selectedDate;
+      });
+    }
   }
 
 
@@ -1053,7 +1007,7 @@ class _SettlementPageState extends State<SettlementPage> {
                         Icons.group,
                         color: isSelected
                             ? Colors.white
-                            : Colors.grey.shade600,
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
                         size: 20,
                       ),
                     ),
@@ -1063,7 +1017,7 @@ class _SettlementPageState extends State<SettlementPage> {
                         fontWeight: FontWeight.w600,
                         color: isSelected
                             ? _primaryColor
-                            : Colors.black87,
+                            : Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                     subtitle: Text(
@@ -1126,7 +1080,9 @@ class _SettlementPageState extends State<SettlementPage> {
             width: 1,
           ),
         ),
-        color: isEven ? Colors.white : Colors.grey.shade50,
+        color: isEven
+            ? Theme.of(context).cardColor
+            : Theme.of(context).colorScheme.surfaceContainerHighest,
         child: ListTile(
           leading: Container(
             width: 44,
@@ -1161,7 +1117,7 @@ class _SettlementPageState extends State<SettlementPage> {
             style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 16,
-              color: Colors.grey.shade800,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
           subtitle: Row(
@@ -1295,7 +1251,11 @@ class _SettlementPageState extends State<SettlementPage> {
               elevation: 10,
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  // ⚠️ قبلاً Colors.white بود؛ در حالت تیره یک جعبه‌ی سفیدِ
+                  // براق وسط صفحه‌ی تیره می‌نشست و متن‌های بدون رنگِ صریح
+                  // داخلش (پیش‌فرضِ تم که در حالت تیره تقریباً سفید است) روی
+                  // همین پس‌زمینه‌ی سفید نامرئی می‌شدند.
+                  color: Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Padding(
@@ -1550,7 +1510,11 @@ class _SettlementPageState extends State<SettlementPage> {
               elevation: 10,
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  // ⚠️ قبلاً Colors.white بود؛ در حالت تیره یک جعبه‌ی سفیدِ
+                  // براق وسط صفحه‌ی تیره می‌نشست و متن‌های بدون رنگِ صریح
+                  // داخلش (پیش‌فرضِ تم که در حالت تیره تقریباً سفید است) روی
+                  // همین پس‌زمینه‌ی سفید نامرئی می‌شدند.
+                  color: Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Padding(
@@ -1583,7 +1547,6 @@ class _SettlementPageState extends State<SettlementPage> {
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                           prefixIcon: Icon(Icons.group, color: _primaryColor),
                           filled: true,
-                          fillColor: Colors.grey[50],
                         ),
                         items: appStateVM.groups
                             .where((group) => _selectedGroupIds.isEmpty || _selectedGroupIds.contains(group.id))
@@ -1612,7 +1575,6 @@ class _SettlementPageState extends State<SettlementPage> {
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                             prefixIcon: Icon(Icons.person, color: _primaryColor),
                             filled: true,
-                            fillColor: Colors.grey[50],
                           ),
                           items: _selectedGroup!.getMembers(allUsers).map((User user) {
                             return DropdownMenuItem<User>(
@@ -1636,7 +1598,6 @@ class _SettlementPageState extends State<SettlementPage> {
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                             prefixIcon: Icon(Icons.person_outline, color: _primaryColor),
                             filled: true,
-                            fillColor: Colors.grey[50],
                           ),
                           items: _selectedGroup!.getMembers(allUsers).map((User user) {
                             return DropdownMenuItem<User>(
@@ -1673,7 +1634,6 @@ class _SettlementPageState extends State<SettlementPage> {
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                             prefixIcon: Icon(Icons.attach_money, color: _primaryColor),
                             filled: true,
-                            fillColor: Colors.grey[50],
                           ),
                         ),
                         SizedBox(height: 16),
@@ -1686,7 +1646,6 @@ class _SettlementPageState extends State<SettlementPage> {
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                             prefixIcon: Icon(Icons.description, color: _primaryColor),
                             filled: true,
-                            fillColor: Colors.grey[50],
                           ),
                           maxLines: 2,
                         ),
@@ -1818,16 +1777,17 @@ class _SettlementPageState extends State<SettlementPage> {
   }
 
 // متد اضافه کردن expense
-  void _addExpense(
+  Future<void> _addExpense(
       User selectedUserPaidBy,
       User selectedUserPaidFor,
       Group selectedGroup,
       String description,
       String amount,
       BuildContext context
-      ) {
+      ) async {
     final totalAmount = double.parse(amount.replaceAll(',', ''));
     final appStateVM = context.read<AppStateVM>();
+    final messenger = ScaffoldMessenger.of(context);
 
     final expense = appStateVM.createExpense(
       amount: totalAmount,
@@ -1838,14 +1798,28 @@ class _SettlementPageState extends State<SettlementPage> {
       description: description.isNotEmpty ? description : 'پرداخت دستی',
     );
 
-    appStateVM.addExpenseToGroup(selectedGroup, expense);
+    // ثبت روی سرور؛ اگر رد شد کاربر باید بفهمد (قبلاً با Firestore بی‌صدا بود)
+    try {
+      await appStateVM.addExpenseToGroup(selectedGroup, expense);
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(e is ApiException ? e.message : 'ثبت تسویه انجام نشد'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
 // محاسبه پیشنهادات تسویه
   List<SettlementSuggestion> _calculateSettlementSuggestions(Map<User, double> debts) {
     final suggestions = <SettlementSuggestion>[];
-    final debtors = debts.entries.where((e) => e.value < 0).toList();
-    final creditors = debts.entries.where((e) => e.value > 0).toList();
+    // ته‌مانده‌های زیر یک تومان نه بدهکارند نه طلبکار؛ وگرنه پیشنهادهایی مثل
+    // «۰ تومان بپرداز» یا «۱ تومان بپرداز» تولید می‌شد.
+    final debtors =
+        debts.entries.where((e) => e.value < 0 && !_isSettled(e.value)).toList();
+    final creditors =
+        debts.entries.where((e) => e.value > 0 && !_isSettled(e.value)).toList();
 
     debtors.sort((a, b) => a.value.compareTo(b.value));
     creditors.sort((b, a) => a.value.compareTo(b.value));
@@ -1860,11 +1834,13 @@ class _SettlementPageState extends State<SettlementPage> {
 
       final settleAmount = debtAmount < creditAmount ? debtAmount : creditAmount;
 
-      suggestions.add(SettlementSuggestion(
-        from: debtor.key,
-        to: creditor.key,
-        amount: settleAmount,
-      ));
+      if (!_isSettled(settleAmount)) {
+        suggestions.add(SettlementSuggestion(
+          from: debtor.key,
+          to: creditor.key,
+          amount: settleAmount.roundToDouble(),
+        ));
+      }
 
       if (debtAmount < creditAmount) {
         creditors[j] = MapEntry(creditor.key, creditAmount - debtAmount);

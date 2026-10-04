@@ -1,4 +1,5 @@
 // view/friends_page.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:iranian_banks/iranian_banks.dart';
@@ -20,10 +21,52 @@ class _FriendsPageState extends State<FriendsPage> {
   String _searchQuery = '';
   int _selectedTab = 0;
 
+  // تب «پیدا کردن»: کل فهرست کاربران یک‌بار از سرور گرفته می‌شود و جست‌وجو
+  // محلی روی همین فهرست انجام می‌شود — همان رفتار نسخه‌ی قدیمیِ Firestore،
+  // با این تفاوت که اینجا یک‌بار می‌آید، نه با یک stream دائمی.
+  //
+  // ⚠️ قبلاً هر تایپ باید حداقل ۲ حرف می‌شد و بعد از ۳۵۰ میلی‌ثانیه یک
+  // درخواست جدا به سرور می‌رفت؛ کاربر می‌خواست به‌جایش «همه را بیاور، بعد
+  // بینشان بگرد»، دقیقاً مثل قبل.
+  List<User> _allUsers = const [];
+  bool _isLoadingAllUsers = false;
+  String? _loadAllUsersError;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAllUsers();
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadAllUsers() async {
+    setState(() {
+      _isLoadingAllUsers = true;
+      _loadAllUsersError = null;
+    });
+    try {
+      final users = await context.read<AppStateVM>().listAllUsers();
+      if (!mounted) return;
+      setState(() {
+        _allUsers = users;
+        _isLoadingAllUsers = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loadAllUsersError = 'دریافت فهرست کاربران انجام نشد';
+        _isLoadingAllUsers = false;
+      });
+    }
+  }
+
+  void _onSearchChanged(String value) {
+    setState(() => _searchQuery = value);
   }
 
   @override
@@ -51,18 +94,19 @@ class _FriendsPageState extends State<FriendsPage> {
       );
     }
 
-    final filteredMembers = _searchQuery.isEmpty
-        ? appStateVM.members
-        : appStateVM.members.where((user) =>
-    user.name.toLowerCase().contains(_searchQuery.toLowerCase()) &&
-        user.id != currentUser.id).toList();
+    // «دوستان من» از مخاطبین محلی می‌آید؛ «پیدا کردن» از نتیجه‌ی جست‌وجوی سرور.
+    final friends = appStateVM.members
+        .where((user) => currentUser.friendIds.contains(user.id))
+        .toList();
 
-    final friends = appStateVM.members.where((user) =>
-        currentUser.friendIds.contains(user.id)).toList();
-
-    final nonFriends = filteredMembers.where((user) =>
-    user.id != currentUser.id &&
-        !currentUser.friendIds.contains(user.id)).toList();
+    final searchQueryLower = _searchQuery.trim().toLowerCase();
+    final nonFriends = _allUsers
+        .where((user) =>
+            user.id != currentUser.id &&
+            !currentUser.friendIds.contains(user.id) &&
+            (searchQueryLower.isEmpty ||
+                user.name.toLowerCase().contains(searchQueryLower)))
+        .toList();
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -116,7 +160,7 @@ class _FriendsPageState extends State<FriendsPage> {
                                   : null,
                             ),
                             style: TextStyle(color: Colors.white),
-                            onChanged: (value) => setState(() => _searchQuery = value),
+                            onChanged: _onSearchChanged,
                           ),
                         ),
                       ),
@@ -173,19 +217,26 @@ class _FriendsPageState extends State<FriendsPage> {
                     ),
                   ),
 
-                  // Tab 1: Search
-                  _searchQuery.isEmpty
+                  // Tab 1: پیدا کردن — فهرست کامل کاربران، با فیلتر محلی
+                  _isLoadingAllUsers && _allUsers.isEmpty
+                      ? const Center(child: CircularProgressIndicator())
+                      : _loadAllUsersError != null && _allUsers.isEmpty
                       ? _buildEmptyState(
-                    Iconsax.search_status,
-                    'دوستان جدید پیدا کنید',
-                    'نام دوست خود را جستجو کنید',
+                    Iconsax.warning_2,
+                    _loadAllUsersError!,
+                    'برای تلاش دوباره لمس کنید',
                     theme,
+                    onTap: _loadAllUsers,
                   )
                       : nonFriends.isEmpty
                       ? _buildEmptyState(
                     Iconsax.search_status,
-                    'نتیجه‌ای یافت نشد',
-                    'اسم دیگری را امتحان کنید',
+                    _searchQuery.trim().isEmpty
+                        ? 'همه با شما دوست‌اند'
+                        : 'نتیجه‌ای یافت نشد',
+                    _searchQuery.trim().isEmpty
+                        ? 'کاربر دیگری برای افزودن نیست'
+                        : 'اسم دیگری را امتحان کنید',
                     theme,
                   )
                       : ListView.builder(
@@ -253,30 +304,39 @@ class _FriendsPageState extends State<FriendsPage> {
     );
   }
 
-  Widget _buildEmptyState(IconData icon, String title, String subtitle, ThemeData theme) {
+  Widget _buildEmptyState(
+    IconData icon,
+    String title,
+    String subtitle,
+    ThemeData theme, {
+    VoidCallback? onTap,
+  }) {
+    final content = Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(icon, size: 64, color: theme.primaryColor),
+        SizedBox(height: 16),
+        Text(
+          title,
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: theme.disabledColor,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        SizedBox(height: 8),
+        Text(
+          subtitle,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.disabledColor.withOpacity(0.7),
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+
+    if (onTap == null) return Center(child: content);
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 64, color: theme.primaryColor),
-          SizedBox(height: 16),
-          Text(
-            title,
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: theme.disabledColor,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          SizedBox(height: 8),
-          Text(
-            subtitle,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.disabledColor.withOpacity(0.7),
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
+      child: InkWell(onTap: onTap, child: Padding(padding: EdgeInsets.all(24), child: content)),
     );
   }
 
@@ -639,7 +699,7 @@ class FriendListItem extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: Colors.grey.shade600,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
                 SizedBox(height: 2),

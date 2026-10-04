@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:gradient_icon/gradient_icon.dart';
 import 'package:provider/provider.dart';
 
-import '../../Services/Auth.dart';
-import '../../Services/GoogleSignInService.dart';
+import '../../Services/Api.dart';
 import '../../ViewModel/AppStateVM.dart';
-import 'ChooseUsername.dart';
+import 'GoogleAuthButton.dart';
+import '../Home/HomePage.dart';
 
 class SignUp extends StatefulWidget {
   SignUp({super.key});
@@ -17,11 +15,94 @@ class SignUp extends StatefulWidget {
 }
 
 class _SignUpState extends State<SignUp> {
-  final AuthService _authService = AuthService();
+  final ApiService _api = ApiService.instance;
   final _formKey = GlobalKey<FormState>();
   bool isVisible = true;
+  bool _loading = false;
+  String _name = '';
   String _email = '';
   String _password = '';
+
+  /// ثبت‌نام با بک‌اند جدید (D1 + JWT). موفقیت یعنی true.
+  /// سرور بعد از ثبت‌نام جفت توکن برمی‌گرداند و کاربر بلافاصله وارد می‌شود؛
+  /// همان نامی که اینجا وارد می‌شود به‌عنوان display_name ذخیره می‌گردد،
+  /// پس دیگر نیازی به صفحه ChooseUsername نیست.
+  Future<bool> _apiRegister(String name, String email, String password) async {
+    setState(() => _loading = true);
+    try {
+      await _api.register(name: name, email: email, password: password);
+      return true;
+    } on ApiException catch (e) {
+      if (mounted) {
+        String msg;
+        if (e.message == 'google-account-exists') {
+          msg = 'این ایمیل با گوگل ثبت شده است، لطفاً با دکمه ورود با گوگل وارد شوید';
+        } else if (e.message == 'email-already-in-use') {
+          msg = 'این ایمیل قبلاً ثبت شده است';
+        } else if (e.message == 'display-name-taken') {
+          msg = 'این نام‌کاربری قبلاً استفاده شده است';
+        } else if (e.statusCode == 409) {
+          msg = 'این ایمیل یا نام‌کاربری قبلاً ثبت شده است';
+        } else {
+          msg = e.message;
+        }
+        _showErrorSnackbar(msg);
+      }
+      return false;
+    } catch (_) {
+      if (mounted) _showErrorSnackbar('اتصال به سرور برقرار نشد');
+      return false;
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// بعد از ورود/ثبت‌نام موفق باید AppStateVM هم خبردار شود، وگرنه
+  /// currentUser تهی می‌ماند و صفحه‌های داخلی «لطفاً ابتدا وارد شوید»
+  /// نشان می‌دهند.
+  Future<void> _goHome() async {
+    await context.read<AppStateVM>().onSignedIn();
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => HomePage()),
+    );
+  }
+
+  InputDecoration _inputDecoration({
+    required String hint,
+    required String label,
+    required Icon prefix,
+    Widget? suffix,
+  }) {
+    return InputDecoration(
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: AppColors.primary, width: 3),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: AppColors.primary, width: 3),
+      ),
+      hintText: hint,
+      hintStyle: const TextStyle(color: AppColors.textSecondary),
+      labelText: label,
+      labelStyle: const TextStyle(color: AppColors.primary),
+      prefixIcon: prefix,
+      prefixIconColor: AppColors.primary,
+      suffixIcon: suffix,
+      filled: true,
+      fillColor: AppColors.cardBackground,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -47,148 +128,65 @@ class _SignUpState extends State<SignUp> {
                   ),
                 ),
                 const SizedBox(height: 30),
-                const SizedBox(height: 5),
                 TextFormField(
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none,
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none,
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppColors.primary, width: 3),
-                    ),
-                    focusedErrorBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppColors.primary, width: 3),
-                    ),
-                    hintText: 'ایمیل خود را وارد کنید',
-                    hintStyle: const TextStyle(
-                      color: AppColors.textSecondary,
-                    ),
-                    labelText: 'ایمیل',
-                    labelStyle: TextStyle(
-                      color: AppColors.primary,
-                    ),
-                    prefixIcon: Icon(Icons.email),
-                    prefixIconColor: AppColors.primary,
-                    filled: true,
-                    fillColor: AppColors.cardBackground,
+                  decoration: _inputDecoration(
+                    hint: 'نام خود را وارد کنید',
+                    label: 'نام',
+                    prefix: const Icon(Icons.person),
                   ),
-                  style: const TextStyle(
-                    color: AppColors.text,
+                  style: const TextStyle(color: AppColors.text),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'لطفا نام خود را وارد کنید';
+                    }
+                    return null;
+                  },
+                  onChanged: (value) => setState(() => _name = value),
+                ),
+                const SizedBox(height: 20),
+                TextFormField(
+                  decoration: _inputDecoration(
+                    hint: 'ایمیل خود را وارد کنید',
+                    label: 'ایمیل',
+                    prefix: const Icon(Icons.email),
                   ),
+                  style: const TextStyle(color: AppColors.text),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'لطفا ایمیل خود را وارد کنید';
                     }
                     return null;
                   },
-                  onChanged: (value) {
-                    setState(() {
-                      _email = value;
-                    });
-                  },
+                  onChanged: (value) => setState(() => _email = value),
                 ),
                 const SizedBox(height: 20),
-                const SizedBox(height: 5),
                 TextFormField(
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none,
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none,
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppColors.primary, width: 3),
-                    ),
-                    focusedErrorBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppColors.primary, width: 3),
-                    ),
-                    hintText: 'رمز عبور خود را وارد کنید',
-                    hintStyle: const TextStyle(
-                      color: AppColors.textSecondary,
-                    ),
-                    labelText: 'رمز عبور',
-                    labelStyle: TextStyle(
-                      color: AppColors.primary,
-                    ),
-                    prefixIcon: Icon(Icons.lock,),
-                    prefixIconColor: AppColors.primary,
-                    suffixIcon: IconButton(
+                  decoration: _inputDecoration(
+                    hint: 'رمز عبور خود را وارد کنید',
+                    label: 'رمز عبور',
+                    prefix: const Icon(Icons.lock),
+                    suffix: IconButton(
                       icon: isVisible
                           ? const Icon(Icons.visibility_off)
                           : const Icon(Icons.visibility),
-                      onPressed: () {
-                        setState(() {
-                          isVisible = !isVisible;
-                        });
-                      },
+                      onPressed: () => setState(() => isVisible = !isVisible),
                       color: AppColors.primary,
                     ),
-                    filled: true,
-                    fillColor: AppColors.cardBackground,
                   ),
                   obscureText: isVisible,
-                  style: const TextStyle(
-                    color: AppColors.text,
-                  ),
+                  style: const TextStyle(color: AppColors.text),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'لطفا رمز عبور خود را وارد کنید';
                     }
-                    if (value.length < 6) {
-                      return 'رمز عبور باید حداقل 6 کاراکتر باشد';
+                    // بک‌اند حداقل ۸ کاراکتر می‌خواهد — اینجا هم همان‌قدر چک شود
+                    if (value.length < 8) {
+                      return 'رمز عبور باید حداقل 8 کاراکتر باشد';
                     }
                     return null;
                   },
-                  onChanged: (value) {
-                    setState(() {
-                      _password = value;
-                    });
-                  },
+                  onChanged: (value) => setState(() => _password = value),
                 ),
-                const SizedBox(height: 20),
-                // Row(
-                //   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                //   children: [
-                //     InkWell(
-                //       onTap: () {
-                //         // افزودن عملکرد فراموشی رمز عبور
-                //       },
-                //       child: const Text(
-                //         'فراموشی رمز عبور',
-                //         style: TextStyle(
-                //           color: AppColors.primary,
-                //           fontSize: 12,
-                //           fontWeight: FontWeight.bold,
-                //         ),
-                //       ),
-                //     ),
-                //     InkWell(
-                //       onTap: () {
-                //         // افزودن عملکرد ثبت نام با موبایل
-                //       },
-                //       child: const Text(
-                //         'ثبت نام با موبایل',
-                //         style: TextStyle(
-                //           color: AppColors.primary,
-                //           fontSize: 12,
-                //           fontWeight: FontWeight.bold,
-                //         ),
-                //       ),
-                //     ),
-                //   ],
-                // ),
                 const SizedBox(height: 40),
                 SizedBox(
                   width: double.infinity,
@@ -204,43 +202,18 @@ class _SignUpState extends State<SignUp> {
                       ],
                     ),
                     child: ElevatedButton(
-                      onPressed: () async {
-                        if (_formKey.currentState!.validate()) {
-                          // ثبت نام با Firebase
-                          dynamic result = await _authService.signUpEmailAndPassword(_email, _password);
-
-                          if (result is User) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('ثبت نام با موفقیت انجام شد'),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
-
-                            // هدایت به صفحه انتخاب نام کاربری
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => ChooseUsername(user: result),
-                              ),
-                            );
-                          } else if (result is String) {
-                            // خطا
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Row(
-                                  children: [
-                                    FaIcon(FontAwesomeIcons.triangleExclamation, color: AppColors.warning),
-                                    const SizedBox(width: 10),
-                                    Text('ثبت نام انجام نشد'),
-                                  ],
-                                ),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        }
-                      },
+                      onPressed: _loading
+                          ? null
+                          : () async {
+                              if (_formKey.currentState!.validate()) {
+                                final ok = await _apiRegister(
+                                    _name.trim(), _email.trim(), _password);
+                                if (ok && mounted) {
+                                  _showSuccessSnackbar('ثبت نام با موفقیت انجام شد');
+                                  await _goHome();
+                                }
+                              }
+                            },
                       style: ElevatedButton.styleFrom(
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
@@ -248,14 +221,19 @@ class _SignUpState extends State<SignUp> {
                         backgroundColor: AppColors.primary,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
-                      child: const Text(
-                        'ثبت نام',
-                        style: TextStyle(
-                          color: Colors.black,
-                          // fontWeight: FontWeight.bold ,
-                          fontSize: 20,
-                        ),
-                      ),
+                      child: _loading
+                          ? const SizedBox(
+                              height: 22,
+                              width: 22,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text(
+                              'ثبت نام',
+                              style: TextStyle(
+                                color: Colors.black,
+                                fontSize: 20,
+                              ),
+                            ),
                     ),
                   ),
                 ),
@@ -263,47 +241,16 @@ class _SignUpState extends State<SignUp> {
                 const Center(
                   child: Text(
                     'یا ادامه با',
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                    ),
+                    style: TextStyle(color: AppColors.textSecondary),
                   ),
                 ),
                 const SizedBox(height: 10),
                 Center(
-                  child: ElevatedButton.icon(
-                    onPressed: () async {
-                      _handleGoogleSignIn();
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.text,
-                      foregroundColor: AppColors.background,
-                      elevation: 100,
-                      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                    ),
-                    icon: ShaderMask(
-                      shaderCallback: (Rect bounds) {
-                        return LinearGradient(
-                          colors: [
-                            Colors.red,
-                            Colors.yellow,
-                            Colors.green,
-                            Colors.blue,
-                          ],
-                          stops: [0.0, 0.4, 0.7, 0.9],
-                        ).createShader(bounds);
-                      },
-                      child: FaIcon(
-                        FontAwesomeIcons.google,
-                        size: 28,
-                        color: Colors.white,
-                      ),
-                    ),
-                    label: Text(
-                      'ثبت نام با گوگل',
-                      style: TextStyle(
-                        fontSize: 14,
-                      ),
-                    ),
+                  child: GoogleAuthButton(
+                    label: 'ثبت نام با گوگل',
+                    enabled: !_loading,
+                    onIdToken: _loginWithGoogleIdToken,
+                    onError: _showErrorSnackbar,
                   ),
                 ),
               ],
@@ -313,29 +260,24 @@ class _SignUpState extends State<SignUp> {
       ),
     );
   }
-  void _handleGoogleSignIn() async {
+
+  /// ثبت‌نام/ورود با گوگل بدون Firebase: توکن گوگل (از دکمه‌ی موبایل یا از
+  /// دکمه‌ی رسمی وب) به POST /api/auth/google فرستاده می‌شود. اگر اکانتی با آن
+  /// ایمیل وجود داشته باشد لاگین می‌شود، وگرنه کاربر جدید ساخته می‌شود.
+  Future<void> _loginWithGoogleIdToken(String idToken) async {
+    setState(() => _loading = true);
     try {
-      User? user = await GoogleSignInService.signInWithGoogle();
-      final appState = Provider.of<AppStateVM>(context, listen: false);
-
-      if (user == null) {
-        _showErrorSnackbar('ثبت نام انجام نشد');
-      } else if (appState.hasEmail(user.email!)){
-        _showErrorSnackbar('ایمیل تکراری است');
-        await GoogleSignInService.signOut();
-      } else {
-        _showSuccessSnackbar('ثبت نام با موفقیت انجام شد ');
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ChooseUsername(user: user),
-          ),
-        );
-
-        // Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomePage()));
+      await _api.loginWithGoogle(idToken);
+      if (mounted) {
+        _showSuccessSnackbar('ثبت نام با موفقیت انجام شد');
+        await _goHome();
       }
+    } on ApiException catch (e) {
+      if (mounted) _showErrorSnackbar(e.message);
     } catch (e) {
-      _showErrorSnackbar('ثبت نام انجام نشد');
+      if (mounted) _showErrorSnackbar('ثبت نام انجام نشد');
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -344,13 +286,10 @@ class _SignUpState extends State<SignUp> {
       SnackBar(
         content: Row(
           children: [
-            FaIcon(FontAwesomeIcons.triangleExclamation, color: AppColors.warning),
-            SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                message,
-              ),
-            ),
+            FaIcon(FontAwesomeIcons.triangleExclamation,
+                color: AppColors.warning),
+            const SizedBox(width: 10),
+            Expanded(child: Text(message)),
           ],
         ),
         backgroundColor: Colors.red,
@@ -363,7 +302,7 @@ class _SignUpState extends State<SignUp> {
       SnackBar(
         content: Text(message),
         backgroundColor: Colors.green,
-        duration: Duration(seconds: 3),
+        duration: const Duration(seconds: 3),
       ),
     );
   }

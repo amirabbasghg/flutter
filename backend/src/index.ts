@@ -19,7 +19,22 @@ import { handleSaveDisplayName } from "./displayNames/saveDisplayName";
 import { handleRegister } from "./auth/register";
 import { handleLogin } from "./auth/login";
 import { handleRefresh, handleLogout } from "./auth/refresh";
+import { handleGoogleLogin } from "./auth/google";
+import { handleForgotPassword, handleResetPassword } from "./auth/passwordReset";
 import { authenticate } from "./auth/middleware";
+import { handleGetMyGroups } from "./me/getGroups";
+import { handleGetMyExpenses } from "./me/getExpenses";
+import { handleGetContacts } from "./me/getContacts";
+import { handleBootstrap } from "./me/bootstrap";
+import { handleUpdateMe } from "./me/updateMe";
+import { handleSearchUsers } from "./users/searchUsers";
+import { handleGetGroupExpenses } from "./groups/getExpenses";
+import {
+  handleAdminBootstrap,
+  handleAdminDeleteUser,
+  handleAdminDeleteGroup,
+  handleAdminDeleteExpense,
+} from "./admin/admin";
 
 // مسیرهایی که بدون توکن در دسترس‌اند. بقیه‌ی /api/* نیاز به ورود دارند.
 const PUBLIC_ROUTES = new Set([
@@ -27,6 +42,9 @@ const PUBLIC_ROUTES = new Set([
   "POST /api/auth/login",
   "POST /api/auth/refresh",
   "POST /api/auth/logout",
+  "POST /api/auth/google",
+  "POST /api/auth/password/forgot",
+  "POST /api/auth/password/reset",
   "GET /api/display-names/check",
 ]);
 
@@ -51,6 +69,65 @@ export default {
         const auth = await authenticate(request, env);
         if (auth instanceof Response) return auth;
         // auth همان userId است؛ در گام ۲ برای چک دسترسی استفاده می‌شود
+      }
+
+      // ---- مسیرهای پنل مدیریت کلی (/api/admin/*) ----
+      if (request.method === "GET" && path === "/api/admin/bootstrap") {
+        return handleAdminBootstrap(request, env);
+      }
+
+      const adminDeleteUserMatch = path.match(/^\/api\/admin\/users\/([^/]+)$/);
+      if (request.method === "DELETE" && adminDeleteUserMatch) {
+        return handleAdminDeleteUser(request, env, adminDeleteUserMatch[1]);
+      }
+
+      const adminDeleteGroupMatch = path.match(/^\/api\/admin\/groups\/([^/]+)$/);
+      if (request.method === "DELETE" && adminDeleteGroupMatch) {
+        return handleAdminDeleteGroup(request, env, adminDeleteGroupMatch[1]);
+      }
+
+      const adminDeleteExpenseMatch = path.match(/^\/api\/admin\/expenses\/([^/]+)$/);
+      if (request.method === "DELETE" && adminDeleteExpenseMatch) {
+        return handleAdminDeleteExpense(request, env, adminDeleteExpenseMatch[1]);
+      }
+
+      // ---- مسیرهای کاربر واردشده (/api/me/*) ----
+      // همه‌ی داده‌های اولیه در یک درخواست: GET /api/me/bootstrap
+      if (request.method === "GET" && path === "/api/me/bootstrap") {
+        return handleBootstrap(request, env);
+      }
+
+      // لیست گروه‌های کاربر واردشده: GET /api/me/groups
+      if (request.method === "GET" && path === "/api/me/groups") {
+        return handleGetMyGroups(request, env);
+      }
+
+      // هزینه‌های همه‌ی گروه‌های کاربر: GET /api/me/expenses
+      if (request.method === "GET" && path === "/api/me/expenses") {
+        return handleGetMyExpenses(request, env);
+      }
+
+      // کاربران قابل مشاهده (خود، دوستان، هم‌گروهی‌ها): GET /api/me/contacts
+      if (request.method === "GET" && path === "/api/me/contacts") {
+        return handleGetContacts(request, env);
+      }
+
+      // ویرایش پروفایل خودِ کاربر: PUT /api/me
+      if (request.method === "PUT" && path === "/api/me") {
+        return handleUpdateMe(request, env);
+      }
+
+      // جست‌وجوی کاربران: GET /api/users/search?q=...
+      // ⚠️ باید قبل از الگوی /api/users/:userId بیاید، وگرنه "search" به‌عنوان
+      // userId تفسیر می‌شود.
+      if (request.method === "GET" && path === "/api/users/search") {
+        return handleSearchUsers(request, env);
+      }
+
+      // لیست هزینه‌های یک گروه: GET /api/groups/:groupId/expenses
+      const groupExpensesMatch = path.match(/^\/api\/groups\/([^/]+)\/expenses$/);
+      if (request.method === "GET" && groupExpensesMatch) {
+        return handleGetGroupExpenses(request, env, groupExpensesMatch[1]);
       }
 
       // دریافت کاربر: GET /api/users/:userId
@@ -177,6 +254,15 @@ if (request.method === "POST" && path === "/api/auth/refresh") {
 }
 if (request.method === "POST" && path === "/api/auth/logout") {
   return handleLogout(request, env);
+}
+if (request.method === "POST" && path === "/api/auth/google") {
+  return handleGoogleLogin(request, env);
+}
+if (request.method === "POST" && path === "/api/auth/password/forgot") {
+  return handleForgotPassword(request, env);
+}
+if (request.method === "POST" && path === "/api/auth/password/reset") {
+  return handleResetPassword(request, env);
 }
       // مسیر یافت نشد
       return response({ error: "Route not found" }, 404);

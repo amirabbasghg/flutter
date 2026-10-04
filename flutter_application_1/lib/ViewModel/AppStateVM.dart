@@ -1,392 +1,266 @@
-// lib/viewmodel/app_state_vm.dart
-import 'dart:async';
+// lib/ViewModel/AppStateVM.dart
+//
+// لایه‌ی داده‌ی اپ. قبلاً مستقیماً روی Cloud Firestore بود؛ حالا کاملاً روی
+// بک‌اند Cloudflare Workers + D1 است. انگیزه‌ی مهاجرت: دامنه‌های Firestore از
+// ایران بدون فیلترشکن در دسترس نیستند، در حالی که workers.dev هست.
+//
+// تفاوت مفهومی مهم با نسخه‌ی Firestore:
+//   قبلاً members یعنی «همه‌ی کاربران اپ» — هر کلاینت کل جدول users را
+//   می‌خواند. حالا members یعنی «کاربرانِ قابل مشاهده برای من»: خودم،
+//   دوستانم و هم‌گروهی‌هایم (GET /api/me/contacts). برای پیدا کردن دوست جدید
+//   از searchUsers استفاده می‌شود که سمت سرور جست‌وجو می‌کند.
+//
+// real-time listener وجود ندارد (D1 چنین چیزی ندارد). به‌جایش هر تغییر، پاسخ
+// سرور را در حالت محلی اعمال می‌کند و reload() برای تازه‌سازی دستی هست.
 
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:flutter/material.dart';
 import 'package:english_words/english_words.dart';
-import 'package:firebase_auth/firebase_auth.dart' as firebase;
+import 'package:uuid/uuid.dart';
+
 import 'package:namer_app/model/Group.dart';
 import 'package:namer_app/model/Expense.dart';
 import 'package:namer_app/model/WordPairModel.dart';
 import 'package:namer_app/model/User.dart';
 
-import '../Services/Database.dart';
+import '../Services/Api.dart';
+import '../Services/TokenStore.dart';
 
 class AppStateVM extends ChangeNotifier {
+  final ApiService _api = ApiService.instance;
+
   WordPairModel _current = WordPairModel(
-    first: WordPair
-        .random()
-        .first,
-    second: WordPair
-        .random()
-        .second,
+    first: WordPair.random().first,
+    second: WordPair.random().second,
   );
 
   final List<WordPairModel> _favorites = [];
-  User? _currentUser;
 
-  // لیست‌های کش شده
+  User? _currentUser;
   List<User> _members = [];
   List<Group> _groups = [];
   List<Expense> _allExpenses = [];
 
-  // سرویس Firestore
-  final FirestoreService _firestoreService = FirestoreService();
+  bool _isLoading = false;
+  String? _loadError;
 
   WordPairModel get current => _current;
-
   List<WordPairModel> get favorites => _favorites;
 
   User? get currentUser => _currentUser;
 
+  /// کاربران قابل مشاهده: خودم + دوستان + هم‌گروهی‌ها.
   List<User> get members => _members;
 
   List<Group> get groups => _groups;
-
   List<Expense> get allExpenses => _allExpenses;
 
-  StreamSubscription<firebase_auth.User?>? _authStateSubscription;
+  /// در حال گرفتن داده از سرور.
+  bool get isLoading => _isLoading;
 
-  AppStateVM() {
-    initialize();
+  /// پیام خطای آخرین بارگذاری (null یعنی مشکلی نبود).
+  String? get loadError => _loadError;
+
+  bool get isLoggedIn => _currentUser != null;
+
+  // ===========================================================================
+  // ورود / خروج و بارگذاری
+  // ===========================================================================
+
+  /// کاربر فعلی را از نشست ذخیره‌شده می‌سازد. بعد از login/register همه‌ی این
+  /// مقادیر پر هستند، پس حتی وقتی سرور در دسترس نیست currentUser تهی نمی‌ماند
+  /// (وگرنه صفحه‌ها «لطفاً ابتدا وارد شوید» نشان می‌دهند).
+  User? _userFromTokenStore() {
+    final id = TokenStore.userId;
+    if (id == null || id.isEmpty) return null;
+    final photo = TokenStore.photoURL;
+    final account = TokenStore.accountNumber;
+    return User(
+      id: id,
+      name: (TokenStore.name?.isNotEmpty == true) ? TokenStore.name! : 'کاربر',
+      email: TokenStore.email ?? '',
+      photoURL: (photo?.isNotEmpty == true) ? photo : null,
+      accountNumber: (account?.isNotEmpty == true) ? account : null,
+      friendIds: _currentUser?.friendIds,
+    );
   }
 
-  @override
-  void dispose() {
-    _authStateSubscription?.cancel();
-    super.dispose();
+  /// بلافاصله بعد از ورود موفق (ایمیل/رمز، ثبت‌نام یا گوگل) و همچنین در
+  /// Wrapper موقع باز شدن اپ با نشست ذخیره‌شده صدا زده می‌شود.
+  Future<void> onSignedIn() async {
+    _currentUser = _userFromTokenStore();
+    notifyListeners();
+    await reload();
   }
 
-  void _setupAuthListener() {
-    _authStateSubscription =
-        firebase_auth.FirebaseAuth.instance.authStateChanges().listen((
-            firebaseUser) {
-          if (firebaseUser != null) {
-            // کاربر لاگین کرده
-            _handleUserAuthState(firebaseUser);
-          } else {
-            // کاربر لاگ اوت کرده
-            _currentUser = null;
-            notifyListeners();
-          }
-        });
-  }
+  /// سازگاری با فراخوان‌های قدیمی؛ همان reload است.
+  Future<void> initialize() => reload();
 
-  Future<void> _handleUserAuthState(firebase_auth.User firebaseUser) async {
+  /// گرفتن همه‌ی داده‌ها در یک درخواست (GET /api/me/bootstrap).
+  Future<void> reload() async {
+    if (!TokenStore.hasSession) {
+      _clearState();
+      return;
+    }
+
+    _isLoading = true;
+    notifyListeners();
+
     try {
-      await _loadMembers();
-      await _loadGroups();
-      await _loadExpenses();
-      // اول بررسی می‌کنیم که کاربر در لیست members وجود دارد یا نه
-      User? existingUser = findUserById(firebaseUser.uid);
+      final data = await _api.bootstrap();
 
-      if (existingUser != null) {
-        // کاربر در دیتابیس وجود دارد
-        _currentUser = existingUser;
+      final user = data['user'];
+      if (user is Map<String, dynamic>) {
+        _currentUser = User.fromJson(user);
       } else {
-        // کاربر جدید - باید به دیتابیس اضافه شود
-        final newUser = User(
-          id: firebaseUser.uid,
-          name: firebaseUser.displayName ?? firebaseUser.email
-              ?.split('@')
-              .first ?? 'User',
-          email: firebaseUser.email ?? '',
-          photoURL: firebaseUser.photoURL,
-        );
-
-        await _firestoreService.usersCollection.doc(firebaseUser.uid).set(
-            newUser.toFirestore());
-        _members.add(newUser);
-        _currentUser = newUser;
+        _currentUser ??= _userFromTokenStore();
       }
 
+      _members = _parseList(data['contacts'], User.fromJson);
+      _groups = _parseList(data['groups'], Group.fromJson);
+      _allExpenses = _parseList(data['expenses'], Expense.fromJson);
+      _ensureSelfInMembers();
+
+      _loadError = null;
+    } on SessionExpiredException {
+      await _signOutLocally();
+      return;
+    } on ApiException catch (e) {
+      if (e.statusCode == 401 || e.statusCode == 403) {
+        await _signOutLocally();
+        return;
+      }
+      _loadError = e.message;
+      _currentUser ??= _userFromTokenStore();
+    } catch (_) {
+      // خطای شبکه: نشست و داده‌های قبلی را از دست نده
+      _loadError = 'اتصال به سرور برقرار نشد';
+      _currentUser ??= _userFromTokenStore();
+    } finally {
+      _isLoading = false;
       notifyListeners();
-    } catch (e) {
-      print('Error handling auth state: $e');
     }
   }
 
+  /// فقط پروفایل کاربر را تازه می‌کند (سبک‌تر از reload).
   Future<void> refreshCurrentUser() async {
-    final currentFirebaseUser = firebase_auth.FirebaseAuth.instance.currentUser;
-
-    if (currentFirebaseUser != null) {
-      await _handleUserAuthState(currentFirebaseUser);
-    } else {
-      _currentUser = null;
-      notifyListeners();
-    }
-  }
-
-  Future<void> initialize() async {
-    // بارگذاری اولیه داده‌ها
-    await _loadMembers();
-    await _loadGroups();
-    await _loadExpenses();
-
-    // راه‌اندازی listeners برای تغییرات real-time
-    _setupRealTimeListeners();
-  }
-
-  void _setupRealTimeListeners() {
-    // Listener برای کاربران
-    _firestoreService.usersCollection.snapshots().listen((snapshot) {
-      _members = snapshot.docs.map((doc) => User.fromFirestore(doc)).toList();
-      notifyListeners();
-    });
-
-    // Listener برای گروه‌ها
-    _firestoreService.groupsCollection.snapshots().listen((snapshot) {
-      _groups = snapshot.docs.map((doc) => Group.fromFirestore(doc)).toList();
-      notifyListeners();
-    });
-
-    // Listener برای expenses
-    _firestoreService.expensesCollection.snapshots().listen((snapshot) {
-      _allExpenses =
-          snapshot.docs.map((doc) => Expense.fromFirestore(doc)).toList();
-      notifyListeners();
-    });
-  }
-
-  Future<void> _loadMembers() async {
     try {
-      final snapshot = await _firestoreService.usersCollection.get();
-      _members = snapshot.docs.map((doc) => User.fromFirestore(doc)).toList();
-    } catch (e) {
-      print('Error loading members: $e');
+      if (!TokenStore.hasSession) {
+        _clearState();
+        return;
+      }
+      final profile = await _api.getMyProfile();
+      _currentUser = User.fromJson(profile);
+      _upsertMember(_currentUser!);
+      notifyListeners();
+    } on SessionExpiredException {
+      await _signOutLocally();
+    } on ApiException catch (e) {
+      if (e.statusCode == 401 || e.statusCode == 403) {
+        await _signOutLocally();
+        return;
+      }
+      _currentUser ??= _userFromTokenStore();
+      notifyListeners();
+    } catch (_) {
+      _currentUser ??= _userFromTokenStore();
+      notifyListeners();
     }
   }
 
-  Future<void> _loadGroups() async {
+  /// خروج: نشست سرور باطل و حالت محلی پاک می‌شود.
+  Future<void> logout() async {
     try {
-      final snapshot = await _firestoreService.groupsCollection.get();
-      _groups = snapshot.docs.map((doc) => Group.fromFirestore(doc)).toList();
-    } catch (e) {
-      print('Error loading groups: $e');
+      await _api.logout();
+    } catch (_) {
+      // حتی اگر سرور در دسترس نبود، نشست محلی باید پاک شود
+      await TokenStore.clear();
     }
+    _clearState();
   }
 
-  Future<void> _loadExpenses() async {
-    try {
-      final snapshot = await _firestoreService.expensesCollection.get();
-      _allExpenses =
-          snapshot.docs.map((doc) => Expense.fromFirestore(doc)).toList();
-    } catch (e) {
-      print('Error loading expenses: $e');
-    }
+  Future<void> _signOutLocally() async {
+    await TokenStore.clear();
+    _clearState();
   }
 
-  Future<void> setAmount(double value) async {
+  void _clearState() {
+    _currentUser = null;
+    _members = [];
+    _groups = [];
+    _allExpenses = [];
+    _isLoading = false;
+    _loadError = null;
     notifyListeners();
   }
 
-  void refresh() {
-    notifyListeners();
-  }
-
-  // اضافه کردن کاربر جدید
-  Future<void> addUser({
-    required String name,
-    required String email,
-    String? photoURL,
-    String? id,
-  }) async {
-    if (name
-        .trim()
-        .isNotEmpty && !hasEmail(email)) {
-      final userId = id ?? _firestoreService.usersCollection
-          .doc()
-          .id;
-      final newUser = User(
-        id: userId,
-        name: name.trim(),
-        email: email,
-        photoURL: photoURL,
-      );
-
-      await _firestoreService.usersCollection.doc(userId).set(
-          newUser.toFirestore());
+  /// خودِ کاربر همیشه باید در members باشد تا نام و عکسش در صفحه‌ها پیدا شود.
+  void _ensureSelfInMembers() {
+    final me = _currentUser;
+    if (me == null) return;
+    if (!_members.any((u) => u.id == me.id)) {
+      _members = [me, ..._members];
     }
   }
 
-  // اضافه کردن کاربر از Firebase User
-  Future<void> addUserFromFirebase(firebase.User firebaseUser,
-      String name) async {
-    if (!hasEmail(firebaseUser.email ?? '')) {
-      final newUser = User(
-        id: firebaseUser.uid,
-        name: name,
-        email: firebaseUser.email ?? '',
-        photoURL: firebaseUser.photoURL,
-      );
-
-      await _firestoreService.usersCollection.doc(firebaseUser.uid).set(
-          newUser.toFirestore());
-      _members.add(newUser);
-    }
-  }
+  // ===========================================================================
+  // گروه‌ها
+  // ===========================================================================
 
   Future<void> addGroup(String name, List<User> selectedMembers) async {
-    if (name
-        .trim()
-        .isNotEmpty) {
-      final memberIds = selectedMembers.map((user) => user.id).toList();
-      final currentUserId = _currentUser?.id ?? 'unknown';
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return;
 
-      final newGroup = Group.create(
-        name: name.trim(),
-        memberIds: memberIds,
-        createdBy: currentUserId,
-      );
+    final memberIds = selectedMembers.map((u) => u.id).toSet();
+    // سازنده همیشه عضو گروه است (سرور هم همین کار را می‌کند)
+    if (_currentUser != null) memberIds.add(_currentUser!.id);
 
-      await _firestoreService.saveGroup(newGroup);
-    }
+    final created = await _api.createGroup(
+      id: const Uuid().v4(),
+      name: trimmed,
+      memberIds: memberIds.toList(),
+    );
+
+    _groups = [Group.fromJson(created), ..._groups];
+    notifyListeners();
+    // عضو جدید ممکن است هنوز در members نباشد
+    await _refreshContacts();
+  }
+
+  /// نام و/یا اعضای گروه را ذخیره می‌کند. صفحه‌ها memberIds را درجا تغییر
+  /// می‌دهند و بعد این متد را صدا می‌زنند، پس هر دو فرستاده می‌شود.
+  Future<void> updateGroup(Group group) async {
+    final updated = await _api.updateGroup(
+      groupId: group.id,
+      name: group.name,
+      memberIds: group.memberIds,
+    );
+    _replaceGroup(Group.fromJson(updated));
+    notifyListeners();
+    await _refreshContacts();
   }
 
   Future<void> removeGroup(Group group) async {
-    try {
-      // حذف expenseهای گروه
-      final groupExpenses = _allExpenses.where((expense) =>
-      expense.groupId == group.id);
-      for (final expense in groupExpenses) {
-        await _firestoreService.deleteExpense(expense.id);
-      }
-
-      // حذف گروه
-      await _firestoreService.deleteGroup(group.id);
-    } catch (e) {
-      print('Error removing group: $e');
-    }
-  }
-
-  // بررسی وجود ایمیل
-  bool hasEmail(String email) {
-    return _members.any((user) =>
-    user.email == email.trim());
-  }
-
-  // بررسی وجود نام
-  bool hasName(String name) {
-    return _members.any((user) =>
-    user.name.toLowerCase() == name.toLowerCase().trim());
-  }
-
-  // پیدا کردن کاربر با ایمیل
-  User? findUserByEmail(String email) {
-    try {
-      return _members.firstWhere((user) =>
-      user.email.toLowerCase() == email.toLowerCase().trim());
-    } catch (e) {
-      return null;
-    }
-  }
-
-  // پیدا کردن کاربر با نام
-  User? findUserByName(String name) {
-    try {
-      return _members.firstWhere((user) =>
-      user.name.toLowerCase() == name.toLowerCase().trim());
-    } catch (e) {
-      return null;
-    }
-  }
-
-  // پیدا کردن کاربر با ID
-  User? findUserById(String userId) {
-    try {
-      return _members.firstWhere((user) => user.id == userId);
-    } catch (e) {
-      return null;
-    }
-  }
-
-  Future<void> removeMember(User user) async {
-    try {
-      // حذف کاربر از گروه‌ها
-      for (final group in _groups) {
-        if (group.memberIds.contains(user.id)) {
-          group.memberIds.remove(user.id);
-          await _firestoreService.updateGroup(group);
-        }
-      }
-
-      // مدیریت expenseهای کاربر
-      final userExpenses = _allExpenses.where((expense) =>
-      expense.paidById == user.id || expense.paidForIds.contains(user.id));
-
-      for (final expense in userExpenses) {
-        if (expense.paidById == user.id) {
-          await _firestoreService.deleteExpense(expense.id);
-        } else {
-          expense.paidForIds.remove(user.id);
-          await _firestoreService.updateExpense(expense);
-        }
-      }
-
-      // حذف کاربر
-      await _firestoreService.usersCollection.doc(user.id).delete();
-    } catch (e) {
-      print('Error removing member: $e');
-    }
-  }
-
-  Future<void> addExpenseToGroup(Group group, Expense expense) async {
-    await _firestoreService.addExpenseToGroup(expense, group);
-  }
-
-  Future<void> removeExpenseFromGroup(Group group, Expense expense) async {
-    await _firestoreService.removeExpenseFromGroup(expense.id, group);
-  }
-
-  List<Expense> getExpensesForGroup(Group group) {
-    return _allExpenses
-        .where((expense) => expense.groupId == group.id)
-        .toList();
-  }
-
-  double getTotalExpensesForGroup(Group group) {
-    final groupExpenses = getExpensesForGroup(group);
-    return groupExpenses.fold(0, (sum, expense) => sum + expense.amount);
-  }
-
-  double getUserBalanceInGroup(User user, Group group) {
-    final groupExpenses = getExpensesForGroup(group);
-    double balance = 0;
-
-    for (final expense in groupExpenses) {
-      balance += expense.getDebtAmountForUser(user, _members);
-    }
-
-    return balance;
-  }
-
-  List<Map<String, dynamic>> getSettlementsForGroup(Group group) {
-    return group.getSettlements(_allExpenses, _members);
-  }
-
-  void toggleFavorite() {
-    if (_favorites.contains(_current)) {
-      _favorites.remove(_current);
-    } else {
-      _favorites.add(_current);
-    }
+    // سرور با ON DELETE CASCADE هزینه‌های گروه را هم پاک می‌کند
+    await _api.deleteGroup(group.id);
+    _groups = _groups.where((g) => g.id != group.id).toList();
+    _allExpenses = _allExpenses.where((e) => e.groupId != group.id).toList();
     notifyListeners();
   }
 
-  bool isFavorite(WordPairModel pair) {
-    return _favorites.contains(pair);
+  List<Group> getGroupsForUser(User user) =>
+      _groups.where((g) => g.memberIds.contains(user.id)).toList();
+
+  List<Group> getCurrentUserGroups() {
+    if (_currentUser == null) return const [];
+    return getGroupsForUser(_currentUser!);
   }
 
-  void getNext() {
-    final newPair = WordPair.random();
-    _current = WordPairModel(
-      first: newPair.first,
-      second: newPair.second,
-    );
-    notifyListeners();
-  }
+  // ===========================================================================
+  // هزینه‌ها
+  // ===========================================================================
 
+  /// ساخت یک Expense با تقسیم مساوی (هنوز ذخیره نشده).
+  /// برای ذخیره، addExpenseToGroup صدا زده می‌شود.
   Expense createExpense({
     required double amount,
     required User paidBy,
@@ -396,9 +270,7 @@ class AppStateVM extends ChangeNotifier {
     required String description,
   }) {
     return Expense(
-      id: _firestoreService.expensesCollection
-          .doc()
-          .id,
+      id: const Uuid().v4(),
       amount: amount,
       paidById: paidBy.id,
       paidForIds: paidFor.map((user) => user.id).toList(),
@@ -410,56 +282,235 @@ class AppStateVM extends ChangeNotifier {
     );
   }
 
-  Future<void> updateGroup(Group group) async {
-    await _firestoreService.updateGroup(group);
+  Future<void> addExpenseToGroup(Group group, Expense expense) async {
+    final body = expense.toJson();
+    // پرداخت‌کننده می‌تواند عضو دیگری از گروه باشد (مثل «علی شام را حساب کرد»)
+    body['paidById'] = expense.paidById;
+
+    final created = await _api.createExpense(body);
+    final saved = Expense.fromJson(created);
+
+    _allExpenses = [..._allExpenses, saved];
+    // expenseIds گروه را هم به‌روز نگه داریم تا محاسبات گروه درست بماند
+    final index = _groups.indexWhere((g) => g.id == group.id);
+    if (index != -1 && !_groups[index].expenseIds.contains(saved.id)) {
+      _groups[index].expenseIds.add(saved.id);
+    }
+    notifyListeners();
   }
 
-  Future<void> updateUser(User user) async {
-    await _firestoreService.usersCollection.doc(user.id).update(
-        user.toFirestore());
+  Future<void> removeExpenseFromGroup(Group group, Expense expense) async {
+    await _api.deleteExpense(expense.id);
+    _allExpenses = _allExpenses.where((e) => e.id != expense.id).toList();
+    final index = _groups.indexWhere((g) => g.id == group.id);
+    if (index != -1) {
+      _groups[index].expenseIds.remove(expense.id);
+    }
+    notifyListeners();
   }
 
   Future<void> updateExpense(Expense expense) async {
-    await _firestoreService.updateExpense(expense);
+    final body = expense.toJson()..remove('id');
+    body['paidById'] = expense.paidById;
+    final updated = await _api.updateExpense(expense.id, body);
+    final saved = Expense.fromJson(updated);
+    _allExpenses = [
+      for (final e in _allExpenses) if (e.id == saved.id) saved else e,
+    ];
+    notifyListeners();
   }
 
-  Future<void> updateUserName(String userId, String name) async {
-    final user = findUserById(userId);
-    if (user != null) {
-      final updatedUser = User(
-        id: user.id,
-        name: name,
-        email: user.email,
-        photoURL: user.photoURL,
-      );
-      await updateUser(updatedUser);
+  List<Expense> getExpensesForGroup(Group group) =>
+      _allExpenses.where((expense) => expense.groupId == group.id).toList();
+
+  double getTotalExpensesForGroup(Group group) => getExpensesForGroup(group)
+      .fold(0.0, (total, expense) => total + expense.amount);
+
+  double getUserBalanceInGroup(User user, Group group) {
+    double balance = 0;
+    for (final expense in getExpensesForGroup(group)) {
+      balance += expense.getDebtAmountForUser(user, _members);
+    }
+    return balance;
+  }
+
+  List<Map<String, dynamic>> getSettlementsForGroup(Group group) =>
+      group.getSettlements(_allExpenses, _members);
+
+  // ===========================================================================
+  // دوستان و مخاطبین
+  // ===========================================================================
+
+  Future<void> addFriend(String friendId) async {
+    if (_currentUser == null) return;
+    if (_currentUser!.friendIds.contains(friendId)) return;
+
+    await _api.addFriend(friendId);
+    _currentUser = _currentUser!.copyWithAddedFriend(friendId);
+    notifyListeners();
+    // دوست جدید حالا مخاطب است → اطلاعات کاملش را بگیر
+    await _refreshContacts();
+  }
+
+  Future<void> removeFriend(String friendId) async {
+    if (_currentUser == null) return;
+    if (!_currentUser!.friendIds.contains(friendId)) return;
+
+    await _api.removeFriend(friendId);
+    _currentUser = _currentUser!.copyWithRemovedFriend(friendId);
+    notifyListeners();
+    await _refreshContacts();
+  }
+
+  /// همه‌ی کاربران اپ، برای تب «پیدا کردن» در صفحه‌ی دوستان. فیلتر کردن روی
+  /// همین لیست محلی انجام می‌شود — دقیقاً مثل نسخه‌ی قدیمیِ Firestore، با این
+  /// تفاوت که اینجا یک‌بار از سرور می‌آید نه با یک stream دائمی.
+  Future<List<User>> listAllUsers() async {
+    final results = await _api.listAllUsers();
+    return _parseList(results, User.fromJson);
+  }
+
+  /// جست‌وجوی کاربران سمت سرور. برای تعداد کاربرانِ یک اپ دوستانه معمولاً
+  /// لازم نیست؛ [listAllUsers] کافی است.
+  Future<List<User>> searchUsers(String query) async {
+    final results = await _api.searchUsers(query);
+    return _parseList(results, User.fromJson);
+  }
+
+  Future<void> _refreshContacts() async {
+    try {
+      _members = _parseList(await _api.getContacts(), User.fromJson);
+      _ensureSelfInMembers();
+      notifyListeners();
+    } catch (_) {
+      // لیست قبلی را نگه دار؛ reload بعدی درستش می‌کند
     }
   }
 
-  Future<void> updateUserPhotoURL(String userId, String photoURL) async {
-    final user = findUserById(userId);
-    if (user != null) {
-      final updatedUser = User(
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        photoURL: photoURL,
-      );
-      await updateUser(updatedUser);
+  // ===========================================================================
+  // پروفایل خودِ کاربر
+  // ===========================================================================
+
+  Future<void> updateCurrentUser({
+    String? name,
+    String? photoURL,
+    String? accountNumber,
+  }) async {
+    if (_currentUser == null) return;
+    final updated = await _api.updateMyProfile(
+      name: name,
+      photoURL: photoURL,
+      accountNumber: accountNumber,
+    );
+    _currentUser = User.fromJson(updated);
+    _upsertMember(_currentUser!);
+    await TokenStore.save(
+      accessToken: TokenStore.accessToken ?? '',
+      refreshToken: TokenStore.refreshToken ?? '',
+      userId: _currentUser!.id,
+      name: _currentUser!.name,
+      email: _currentUser!.email,
+      photoURL: _currentUser!.photoURL,
+      accountNumber: _currentUser!.accountNumber,
+    );
+    notifyListeners();
+  }
+
+  Future<void> updateCurrentUserAccountNumber(String accountNumber) =>
+      updateCurrentUser(accountNumber: accountNumber);
+
+  /// فقط شماره کارت خودِ کاربر قابل تغییر است؛ بک‌اند اجازه‌ی ویرایش پروفایل
+  /// دیگران را نمی‌دهد.
+  Future<void> updateUserAccountNumber(
+    String userId,
+    String accountNumber,
+  ) async {
+    if (_currentUser?.id != userId) {
+      throw ApiException(403, 'فقط شماره کارت خودتان قابل تغییر است');
+    }
+    await updateCurrentUser(accountNumber: accountNumber);
+  }
+
+  bool hasAccountNumber(User user) =>
+      user.accountNumber != null && user.accountNumber!.isNotEmpty;
+
+  String? getUserAccountNumber(String userId) =>
+      findUserById(userId)?.accountNumber;
+
+  // ===========================================================================
+  // جست‌وجو در حالت محلی
+  // ===========================================================================
+
+  bool hasEmail(String email) =>
+      _members.any((user) => user.email == email.trim());
+
+  bool hasName(String name) => _members
+      .any((user) => user.name.toLowerCase() == name.toLowerCase().trim());
+
+  User? findUserByEmail(String email) {
+    final target = email.toLowerCase().trim();
+    for (final user in _members) {
+      if (user.email.toLowerCase() == target) return user;
+    }
+    return null;
+  }
+
+  User? findUserByName(String name) {
+    final target = name.toLowerCase().trim();
+    for (final user in _members) {
+      if (user.name.toLowerCase() == target) return user;
+    }
+    return null;
+  }
+
+  User? findUserById(String userId) {
+    for (final user in _members) {
+      if (user.id == userId) return user;
+    }
+    if (_currentUser?.id == userId) return _currentUser;
+    return null;
+  }
+
+  // ===========================================================================
+  // کمکی‌ها
+  // ===========================================================================
+
+  void _replaceGroup(Group group) {
+    final index = _groups.indexWhere((g) => g.id == group.id);
+    if (index == -1) {
+      _groups = [group, ..._groups];
+    } else {
+      _groups[index] = group;
     }
   }
 
-  Future<void> updateUserEmail(String userId, String email) async {
-    final user = findUserById(userId);
-    if (user != null) {
-      final updatedUser = User(
-        id: user.id,
-        name: user.name,
-        email: email,
-        photoURL: user.photoURL,
-      );
-      await updateUser(updatedUser);
+  void _upsertMember(User user) {
+    final index = _members.indexWhere((u) => u.id == user.id);
+    if (index == -1) {
+      _members = [..._members, user];
+    } else {
+      _members[index] = user;
     }
+  }
+
+  static List<T> _parseList<T>(
+    dynamic raw,
+    T Function(Map<String, dynamic>) fromJson,
+  ) {
+    if (raw is! List) return <T>[];
+    final out = <T>[];
+    for (final item in raw) {
+      if (item is Map<String, dynamic>) out.add(fromJson(item));
+    }
+    return out;
+  }
+
+  Future<void> setAmount(double value) async {
+    notifyListeners();
+  }
+
+  void refresh() {
+    notifyListeners();
   }
 
   Future<void> setCurrentUser(User user) async {
@@ -467,240 +518,24 @@ class AppStateVM extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> startSetCurrentUserFromFirebase(firebase.User firebaseUser,
-      String name) async {
-    User? existingUser = findUserById(firebaseUser.uid);
+  // ===========================================================================
+  // WordPair (نمونه‌ی اولیه‌ی پروژه — بی‌ارتباط با داده‌ی هزینه‌ها)
+  // ===========================================================================
 
-    if (existingUser != null) {
-      _currentUser = existingUser;
+  void toggleFavorite() {
+    if (_favorites.contains(_current)) {
+      _favorites.remove(_current);
     } else {
-      await addUserFromFirebase(firebaseUser, name);
-      _currentUser = findUserById(firebaseUser.uid);
-    }
-
-    notifyListeners();
-  }
-
-  Future<void> setCurrentUserFromFirebase(firebase.User firebaseUser) async {
-    User? existingUser = findUserById(firebaseUser.uid);
-    if (existingUser != null) {
-      _currentUser = existingUser;
+      _favorites.add(_current);
     }
     notifyListeners();
   }
 
-  Future<void> logout() async {
-    _currentUser = null;
+  bool isFavorite(WordPairModel pair) => _favorites.contains(pair);
+
+  void getNext() {
+    final newPair = WordPair.random();
+    _current = WordPairModel(first: newPair.first, second: newPair.second);
     notifyListeners();
-  }
-
-  bool get isLoggedIn => _currentUser != null;
-
-  Future<void> updateCurrentUser({
-    String? name,
-    String? email,
-    String? photoURL,
-  }) async {
-    if (_currentUser != null) {
-      final updatedUser = User(
-        id: _currentUser!.id,
-        name: name ?? _currentUser!.name,
-        email: email ?? _currentUser!.email,
-        photoURL: photoURL ?? _currentUser!.photoURL,
-      );
-
-      await updateUser(updatedUser);
-      _currentUser = updatedUser;
-    }
-  }
-
-  // متدهای کمکی برای کار با Firestore
-  Stream<List<User>> getUsersStream() {
-    return _firestoreService.usersCollection.snapshots().map((snapshot) {
-      return snapshot.docs.map((doc) => User.fromFirestore(doc)).toList();
-    });
-  }
-
-  Stream<List<Group>> getGroupsStream() {
-    return _firestoreService.groupsCollection.snapshots().map((snapshot) {
-      return snapshot.docs.map((doc) => Group.fromFirestore(doc)).toList();
-    });
-  }
-
-  Stream<List<Expense>> getExpensesStream() {
-    return _firestoreService.expensesCollection.snapshots().map((snapshot) {
-      return snapshot.docs.map((doc) => Expense.fromFirestore(doc)).toList();
-    });
-  }
-
-  // در AppStateVM
-  Future<void> addFriend(String friendId) async {
-    if (_currentUser != null && !_currentUser!.friendIds.contains(friendId)) {
-      try {
-        // گرفتن اطلاعات کاربر مقابل
-        final friendUser = await _getUserById(friendId);
-        if (friendUser == null) {
-          throw Exception('User not found');
-        }
-
-        final batch = _firestoreService.batch;
-
-        // آپدیت کاربر فعلی - اضافه کردن دوست به لیست
-        final updatedCurrentUser = _currentUser!.copyWithAddedFriend(friendId);
-        final currentUserDoc = _firestoreService.usersCollection.doc(
-            _currentUser!.id);
-        batch.update(
-            currentUserDoc, {'friendIds': updatedCurrentUser.friendIds});
-
-        // آپدیت کاربر مقابل - اضافه کردن کاربر فعلی به لیست دوستانش
-        final updatedFriendUser = friendUser.copyWithAddedFriend(
-            _currentUser!.id);
-        final friendUserDoc = _firestoreService.usersCollection.doc(friendId);
-        batch.update(friendUserDoc, {'friendIds': updatedFriendUser.friendIds});
-
-        // اجرای batch
-        await batch.commit();
-
-        // آپدیت کاربر فعلی در حافظه
-        _currentUser = updatedCurrentUser;
-
-        // آپدیت لیست members اگر کاربر مقابل در آن وجود دارد
-        final friendIndex = _members.indexWhere((user) => user.id == friendId);
-        if (friendIndex != -1) {
-          _members[friendIndex] = updatedFriendUser;
-        }
-
-        notifyListeners();
-      } catch (e) {
-        print('Error adding friend: $e');
-        throw e;
-      }
-    }
-  }
-
-  Future<void> removeFriend(String friendId) async {
-    if (_currentUser != null && _currentUser!.friendIds.contains(friendId)) {
-      try {
-        // گرفتن اطلاعات کاربر مقابل
-        final friendUser = await _getUserById(friendId);
-        if (friendUser == null) {
-          throw Exception('User not found');
-        }
-
-        final batch = _firestoreService.batch;
-
-        // آپدیت کاربر فعلی - حذف دوست از لیست
-        final updatedCurrentUser = _currentUser!.copyWithRemovedFriend(
-            friendId);
-        final currentUserDoc = _firestoreService.usersCollection.doc(
-            _currentUser!.id);
-        batch.update(
-            currentUserDoc, {'friendIds': updatedCurrentUser.friendIds});
-
-        // آپدیت کاربر مقابل - حذف کاربر فعلی از لیست دوستانش
-        final updatedFriendUser = friendUser.copyWithRemovedFriend(
-            _currentUser!.id);
-        final friendUserDoc = _firestoreService.usersCollection.doc(friendId);
-        batch.update(friendUserDoc, {'friendIds': updatedFriendUser.friendIds});
-
-        // اجرای batch
-        await batch.commit();
-
-        // آپدیت کاربر فعلی در حافظه
-        _currentUser = updatedCurrentUser;
-
-        // آپدیت لیست members اگر کاربر مقابل در آن وجود دارد
-        final friendIndex = _members.indexWhere((user) => user.id == friendId);
-        if (friendIndex != -1) {
-          _members[friendIndex] = updatedFriendUser;
-        }
-
-        notifyListeners();
-      } catch (e) {
-        print('Error removing friend: $e');
-        throw e;
-      }
-    }
-  }
-
-// متد کمکی برای گرفتن کاربر از Firestore
-  Future<User?> _getUserById(String userId) async {
-    try {
-      final doc = await _firestoreService.usersCollection.doc(userId).get();
-      if (doc.exists) {
-        return User.fromFirestore(doc);
-      }
-      return null;
-    } catch (e) {
-      print('Error getting user by ID: $e');
-      return null;
-    }
-  }
-
-  List<Group> getGroupsForUser(User user) {
-    return _groups.where((group) => group.memberIds.contains(user.id)).toList();
-  }
-
-// یا اگر می‌خواهید گروه‌های کاربر فعلی را برگرداند:
-  List<Group> getCurrentUserGroups() {
-    if (_currentUser == null) return [];
-    return _groups
-        .where((group) => group.memberIds.contains(_currentUser!.id))
-        .toList();
-  }
-
-  Future<void> updateUserAccountNumber(String userId,
-      String accountNumber) async {
-    try {
-      // پیدا کردن کاربر
-      final user = findUserById(userId);
-      if (user != null) {
-        // ایجاد کاربر آپدیت شده
-        final updatedUser = user.copyWith(accountNumber: accountNumber);
-
-        // آپدیت در Firestore
-        await _firestoreService.usersCollection.doc(userId).update({
-          'accountNumber': accountNumber,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-
-        // آپدیت در حافظه
-        final userIndex = _members.indexWhere((u) => u.id == userId);
-        if (userIndex != -1) {
-          _members[userIndex] = updatedUser;
-        }
-
-        // اگر کاربر فعلی است، آپدیت شود
-        if (_currentUser?.id == userId) {
-          _currentUser = updatedUser;
-        }
-        refreshCurrentUser();
-
-        notifyListeners();
-      }
-    } catch (e) {
-      print('Error updating account number: $e');
-      throw e;
-    }
-  }
-
-// متد برای آپدیت شماره کارت کاربر فعلی
-  Future<void> updateCurrentUserAccountNumber(String accountNumber) async {
-    if (_currentUser != null) {
-      await updateUserAccountNumber(_currentUser!.id, accountNumber);
-    }
-  }
-
-
-
-// متد برای بررسی وجود شماره کارت
-  bool hasAccountNumber(User user) {
-    return user.accountNumber != null && user.accountNumber!.isNotEmpty;
-  }
-
-// متد برای گرفتن شماره کارت کاربر
-  String? getUserAccountNumber(String userId) {
-    final user = findUserById(userId);
-    return user?.accountNumber;
   }
 }

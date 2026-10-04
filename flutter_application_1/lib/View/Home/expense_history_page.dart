@@ -1,5 +1,4 @@
 // lib/view/expense_history_page.dart
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
@@ -10,14 +9,12 @@ import 'package:persian_datetime_picker/persian_datetime_picker.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_persian_calendar/flutter_persian_calendar.dart'; // اضافه شد
 
 import 'package:namer_app/model/Group.dart';
 import 'package:namer_app/model/Expense.dart';
 import 'package:namer_app/model/User.dart';
+import '../../Services/PdfSaver.dart';
 import '../../ViewModel/AppStateVM.dart';
 
 // enum برای انواع فیلتر کاربر
@@ -219,7 +216,7 @@ class _ExpenseHistoryPageState extends State<ExpenseHistoryPage> {
                     _getEmptyStateMessage(),
                     style: TextStyle(
                       fontSize: 18,
-                      color: Colors.grey[600],
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                       fontWeight: FontWeight.bold,
                     ),
                     textAlign: TextAlign.center,
@@ -665,121 +662,52 @@ class _ExpenseHistoryPageState extends State<ExpenseHistoryPage> {
   }
 
   // انتخاب تاریخ شروع
+  // انتخاب تاریخ شروع
+  //
+  // ⚠️ قبلاً اینجا دیالوگ دست‌ساز روی ویجت PersianCalendar (پکیج
+  // flutter_persian_calendar) بود که دو باگ داشت: ۱) دکمه‌ی «لغو» دقیقاً کار
+  // «تأیید» را می‌کرد (هر دو فقط Navigator.pop می‌زدند)، ۲) خودِ پکیج روز
+  // انتخاب‌شده را با شماره‌ی ماه مقایسه می‌کرد (`selectedDate.month ==
+  // dayIndex + 1`)، پس رنگ‌آمیزی روز انتخابی اشتباه بود و کاربر فکر می‌کرد لمسش
+  // اثر نکرده. showPersianDatePicker از پکیج persian_datetime_picker (که از
+  // قبل در پروژه بود و FinancialReportsPage درست استفاده‌اش می‌کرد) هیچ‌کدام
+  // از این مشکلات را ندارد.
   Future<Jalali?> _selectStartDate(BuildContext context) async {
-    Jalali? selectedDate ;
-
-    await showDialog(
+    final selectedDate = await showPersianDatePicker(
       context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-          child: PersianCalendar(
-            height: 380.0,
-            initialDate: selectedDate,
-            startingDate: Jalali(1400, 1, 1),
-            endingDate: Jalali(1450, 12, 29),
-            onDateChanged: (Jalali newDate) {
-              selectedDate = newDate;
-            },
-            primaryColor: Colors.deepPurple,
-            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-            textStyle: TextStyle(
-              fontFamily: 'Vazir',
-            ),
-            confirmButton: Container(
-              padding: EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                      },
-                      child: Text('لغو'),
-                    ),
-                  ),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        if (selectedDate != null) {
-                          setState(() {
-                            _startDate = selectedDate;
-                            if (_endDate != null && _startDate!.isAfter(_endDate!)) {
-                              _endDate = null;
-                            }
-                          });
-                        }
-                        Navigator.of(context).pop();
-                      },
-                      child: Text('تأیید'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-        );
-      },
+      initialDate: _startDate ?? Jalali.now(),
+      firstDate: Jalali(1400, 1, 1),
+      lastDate: Jalali(1450, 12, 29),
+      locale: const Locale('fa'),
     );
+
+    if (selectedDate != null) {
+      setState(() {
+        _startDate = selectedDate;
+        if (_endDate != null && _startDate!.isAfter(_endDate!)) {
+          _endDate = null;
+        }
+      });
+    }
 
     return selectedDate;
   }
 
   // انتخاب تاریخ پایان
   void _selectEndDate(void Function(void Function()) setState) async {
-    final initialDate = _endDate ?? _startDate ?? Jalali.now();
-    Jalali? selectedDate ;
-    await showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          return Dialog(
-            child: PersianCalendar(
-              height: 380.0,
-              initialDate: initialDate,
-              startingDate: Jalali(1400, 1, 1),
-              endingDate: Jalali(1450, 12, 29),
-              onDateChanged: (Jalali newDate) {
-                selectedDate = newDate;
-              },
-              primaryColor: Colors.deepPurple,
-              backgroundColor: Theme
-                  .of(context)
-                  .scaffoldBackgroundColor,
-              textStyle: TextStyle(
-                fontFamily: 'Vazir',
-              ),
-              confirmButton: Container(
-                padding: EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                        },
-                        child: Text('لغو'),
-                      ),
-                    ),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          if (selectedDate != null) {
-                            setState(() {
-                              _endDate = selectedDate;
-                            });
-                          }
-                          Navigator.of(context).pop();
-                        },
-                        child: Text('تأیید'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        }
+    final selectedDate = await showPersianDatePicker(
+      context: context,
+      initialDate: _endDate ?? _startDate ?? Jalali.now(),
+      firstDate: Jalali(1400, 1, 1),
+      lastDate: Jalali(1450, 12, 29),
+      locale: const Locale('fa'),
     );
+
+    if (selectedDate != null) {
+      setState(() {
+        _endDate = selectedDate;
+      });
+    }
   }
 
   // بخش فیلتر کاربر (بدون تغییر)
@@ -930,7 +858,7 @@ class _ExpenseHistoryPageState extends State<ExpenseHistoryPage> {
                   Text(
                     expense.description,
                     style: TextStyle(
-                      color: Colors.grey[600],
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                       fontSize: 14,
                     ),
                     maxLines: 1,
@@ -1045,7 +973,7 @@ class _ExpenseHistoryPageState extends State<ExpenseHistoryPage> {
   }
 
 // متد حذف هزینه
-  void _deleteExpense(Expense expense, AppStateVM appState) {
+  Future<void> _deleteExpense(Expense expense, AppStateVM appState) async {
     try {
       // پیدا کردن گروه مربوطه
       final group = appState.groups.firstWhere(
@@ -1053,8 +981,11 @@ class _ExpenseHistoryPageState extends State<ExpenseHistoryPage> {
         orElse: () => Group.create(name: 'نامشخص', memberIds: [], createdBy: appState.currentUser!.id),
       );
 
-      // حذف هزینه از گروه
-      appState.removeExpenseFromGroup(group, expense);
+      // حذف هزینه از گروه (روی سرور). بدون await، خطای سرور هرگز به این
+      // try/catch نمی‌رسید و پیام موفقیت الکی نشان داده می‌شد.
+      await appState.removeExpenseFromGroup(group, expense);
+
+      if (!mounted) return;
 
       // نمایش پیام موفقیت
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1126,27 +1057,34 @@ class _ExpenseHistoryPageState extends State<ExpenseHistoryPage> {
   }
 
 // متدهای مربوط به PDF
+  String get _pdfFileName {
+    final now = Jalali.now();
+    final m = now.month.toString().padLeft(2, '0');
+    final d = now.day.toString().padLeft(2, '0');
+    // نام فایل عمداً لاتین است: بعضی مرورگرها و فایل‌سیستم‌ها با نام فارسی در
+    // هدر دانلود بد رفتار می‌کنند.
+    return 'expenses-${now.year}-$m-$d.pdf';
+  }
+
   Future<void> _generateAndSavePdf(List<Expense> expenses, List<User> users, List<Group> groups) async {
     try {
       final pdf = await _createPdfDocument(expenses, users, groups);
+      // روی وب دانلود مرورگر، روی موبایل ذخیره در پوشه‌ی Downloads.
+      final message = await savePdfBytes(await pdf.save(), _pdfFileName);
 
-      final directory = await getDownloadsDirectory();
-      final fileName = 'تاریخچه_هزینه‌ها_${Jalali.now().year}${Jalali.now().month}${Jalali.now().day}.pdf';
-      final file = File('${directory?.path}/$fileName');
-      await file.writeAsBytes(await pdf.save());
-
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('PDF با موفقیت ذخیره شد'),
-          duration: Duration(seconds: 3),
+          content: Text(message),
+          duration: const Duration(seconds: 3),
         ),
       );
-
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('خطا در تولید PDF: $e'),
-          duration: Duration(seconds: 3),
+          duration: const Duration(seconds: 3),
         ),
       );
     }
@@ -1155,13 +1093,9 @@ class _ExpenseHistoryPageState extends State<ExpenseHistoryPage> {
   Future<void> _generateAndSharePdf(List<Expense> expenses, List<User> users, List<Group> groups) async {
     try {
       final pdf = await _createPdfDocument(expenses, users, groups);
-
-      final directory = await getTemporaryDirectory();
-      final fileName = 'تاریخچه_هزینه‌ها_${Jalali.now().year}${Jalali.now().month}${Jalali.now().day}.pdf';
-      final file = File('${directory.path}/$fileName');
-      await file.writeAsBytes(await pdf.save());
-
-      await Share.shareXFiles([XFile(file.path)], text: 'تاریخچه هزینه‌ها');
+      // sharePdf روی موبایل برگه‌ی اشتراک‌گذاری سیستم را باز می‌کند و روی وب
+      // دانلود را شروع می‌کند — یک API برای هر دو، بدون dart:io.
+      await Printing.sharePdf(bytes: await pdf.save(), filename: _pdfFileName);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -1489,7 +1423,7 @@ class _ExpenseHistoryPageState extends State<ExpenseHistoryPage> {
                       child: Text(
                         user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
                         style: TextStyle(
-                          color: Colors.grey[800],
+                          color: Theme.of(context).colorScheme.onPrimaryContainer,
                           fontWeight: FontWeight.bold,
                         ),
                       ),

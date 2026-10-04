@@ -37,6 +37,14 @@ export async function handleRegister(request: Request, env: Env): Promise<Respon
       .bind(email)
       .first<{ id: string }>();
     if (emailTaken) {
+      const googleIdentity = await env.expense_app_db
+        .prepare(`SELECT 1 AS exists_flag FROM google_identities WHERE user_id = ?`)
+        .bind(emailTaken.id)
+        .first<{ exists_flag: number }>();
+
+      if (googleIdentity) {
+        return response({ error: "google-account-exists" }, 409);
+      }
       return response({ error: "email-already-in-use" }, 409);
     }
 
@@ -78,7 +86,21 @@ export async function handleRegister(request: Request, env: Env): Promise<Respon
     } catch (error) {
       // Lost a race with a concurrent registration.
       if (String(error).includes("UNIQUE")) {
-        return response({ error: "email-or-name-already-in-use" }, 409);
+        const recheckEmail = await env.expense_app_db
+          .prepare(`SELECT id FROM users WHERE email = ?`)
+          .bind(email)
+          .first<{ id: string }>();
+        if (recheckEmail) {
+          const googleIdentity = await env.expense_app_db
+            .prepare(`SELECT 1 AS exists_flag FROM google_identities WHERE user_id = ?`)
+            .bind(recheckEmail.id)
+            .first<{ exists_flag: number }>();
+          if (googleIdentity) {
+            return response({ error: "google-account-exists" }, 409);
+          }
+          return response({ error: "email-already-in-use" }, 409);
+        }
+        return response({ error: "display-name-taken" }, 409);
       }
       throw error;
     }

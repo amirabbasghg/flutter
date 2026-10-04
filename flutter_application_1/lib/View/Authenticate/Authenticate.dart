@@ -1,6 +1,4 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:namer_app/Services/Auth.dart';
 import 'package:toggle_switch/toggle_switch.dart';
 
 import 'Sign_in.dart';

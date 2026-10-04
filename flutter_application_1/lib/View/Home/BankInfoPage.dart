@@ -50,7 +50,18 @@ class BankInfoPage extends StatelessWidget {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('شناسایی و اعتبارسنجی کارت بانکی'),
+          // ⚠️ AppBar این اپ در حالت روشن پس‌زمینه‌ی سبزِ پررنگ دارد
+          // (AppTheme.appBarTheme → scheme.primary)، اما TabBar به‌طور
+          // پیش‌فرض رنگ‌هایش را طوری انتخاب می‌کند که انگار پشت یک نوار
+          // surfaceِ خنثی نشسته (labelColor پیش‌فرض خودِ primary است). روی
+          // نوار سبز، یعنی متنِ تب انتخاب‌شده هم‌رنگ پس‌زمینه و عملاً نامرئی
+          // می‌شد. چون پیش‌زمینه‌ی AppBar همیشه سفید/روشن است (هم روی نوار
+          // سبزِ حالت روشن، هم روی نوار تیره‌ی surface در حالت تیره)، رنگ
+          // سفیدِ صریح در هر دو حالت درست است.
           bottom: const TabBar(
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white70,
+            indicatorColor: Colors.white,
             tabs: [Tab(text: 'شماره کارت'), Tab(text: 'شماره شبا')],
           ),
         ),
