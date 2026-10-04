@@ -6,20 +6,11 @@ import '../../ViewModel/AppStateVM.dart';
 import '../../ViewModel/ThemeVM.dart';
 import 'AddExpensePage.dart';
 import 'CalculationPage.dart';
-import 'FinancialGroupPage.dart';
 import 'FinancialReportsPage.dart';
 import 'SettlementPage.dart';
 import 'expense_history_page.dart';
 
 /// صفحه‌ی «هزینه‌ها».
-///
-/// قبلاً هر هشت قابلیت در یک شبکه‌ی ۴ستونه با آیکون و متن ۹پیکسلیِ یکسان بودند
-/// — یعنی «ثبت هزینه» که هر روز استفاده می‌شود هم‌اندازه‌ی «تنظیمات» بود که
-/// اصلاً ساخته نشده. حالا سه لایه دارد:
-///
-///   ۱. کارت‌های اصلی، بزرگ  → کارهای روزمره
-///   ۲. کارت‌های میانی        → کارهایی که گاهی لازم می‌شوند
-///   ۳. نوار پایین، کوچک     → قابلیت‌های هنوز ساخته‌نشده
 class ServicesScreen extends StatelessWidget {
   const ServicesScreen({super.key});
 
@@ -49,13 +40,6 @@ class ServicesScreen extends StatelessWidget {
         Icons.receipt_long_rounded,
         const Color(0xff8b5cf6),
         () => _open(context, ExpenseHistoryPage()),
-      ),
-      _Feature(
-        'گروه‌های مالی',
-        'ساخت و مدیریت گروه‌ها',
-        Icons.groups_rounded,
-        const Color(0xffec4899),
-        () => _open(context, FinancialGroupPage()),
       ),
     ];
 

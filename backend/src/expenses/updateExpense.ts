@@ -1,6 +1,6 @@
 import { Env } from "../types";
 import { response } from "../utils/response";
-import { requireGroupMember, getExpenseGroupId, isGroupMember } from "../auth/authorization";
+import { requireGroupMember, getExpenseGroupId, isGroupMember, isSuperAdminUser } from "../auth/authorization";
 
 type CustomSplit = {
   userId: string;
@@ -61,6 +61,16 @@ export async function handleUpdateExpense(
 
     if (!existingExpense) {
       return response({ error: "Expense not found" }, 404);
+    }
+
+    // فقط پرداخت‌کننده هزینه یا سوپرادمین اجازه ویرایش هزینه را دارد
+    const isPayer = existingExpense.paid_by_id === authorizedId;
+    const isSuperAdmin = await isSuperAdminUser(env, authorizedId);
+    if (!isPayer && !isSuperAdmin) {
+      return response(
+        { error: "Only the payer or super admin can update this expense" },
+        403
+      );
     }
 
     // مقادیر جدید یا مقادیر فعلی
