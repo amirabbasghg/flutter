@@ -1612,23 +1612,38 @@ class __EditExpenseSheetState extends State<_EditExpenseSheet> {
   }
 
   InputDecoration _purpleInputDecoration(String label, IconData icon) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final labelColor = isDark ? Colors.purple.shade200 : Colors.deepPurple.shade800;
+    final prefixIconColor = isDark ? Colors.purple.shade300 : Colors.deepPurple;
+    final fillColor = isDark
+        ? theme.colorScheme.surfaceContainerHighest
+        : Colors.deepPurple.shade50.withValues(alpha: 0.5);
+    final borderSideColor = isDark ? Colors.purple.shade300 : Colors.deepPurple.shade200;
+
     return InputDecoration(
       labelText: label,
-      labelStyle: TextStyle(color: Colors.deepPurple.shade700),
+      labelStyle: TextStyle(
+        color: labelColor,
+        fontWeight: FontWeight.w600,
+        fontSize: 14,
+      ),
+      floatingLabelBehavior: FloatingLabelBehavior.always,
       filled: true,
-      fillColor: Colors.deepPurple.shade50.withOpacity(0.5),
-      prefixIcon: Icon(icon, color: Colors.deepPurple),
+      fillColor: fillColor,
+      prefixIcon: Icon(icon, color: prefixIconColor),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.deepPurple.shade200),
+        borderSide: BorderSide(color: borderSideColor),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.deepPurple.shade200),
+        borderSide: BorderSide(color: borderSideColor),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.deepPurple, width: 2),
+        borderSide: BorderSide(color: isDark ? Colors.purple.shade200 : Colors.deepPurple, width: 2),
       ),
     );
   }
@@ -1636,10 +1651,12 @@ class __EditExpenseSheetState extends State<_EditExpenseSheet> {
   @override
   Widget build(BuildContext context) {
     final appState = widget.appStateVM;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).scaffoldBackgroundColor,
+        color: isDark ? theme.colorScheme.surface : Theme.of(context).scaffoldBackgroundColor,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: EdgeInsets.only(
@@ -1664,7 +1681,7 @@ class __EditExpenseSheetState extends State<_EditExpenseSheet> {
                     width: 48,
                     height: 5,
                     decoration: BoxDecoration(
-                      color: Colors.deepPurple.shade200,
+                      color: isDark ? Colors.purple.shade300 : Colors.deepPurple.shade200,
                       borderRadius: BorderRadius.circular(3),
                     ),
                   ),
@@ -1677,10 +1694,10 @@ class __EditExpenseSheetState extends State<_EditExpenseSheet> {
                     Container(
                       padding: EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.deepPurple.shade100,
+                        color: isDark ? Colors.purple.shade900 : Colors.deepPurple.shade100,
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(Icons.edit_rounded, color: Colors.deepPurple, size: 24),
+                      child: Icon(Icons.edit_rounded, color: isDark ? Colors.purple.shade200 : Colors.deepPurple, size: 24),
                     ),
                     SizedBox(width: 12),
                     Text(
@@ -1688,7 +1705,7 @@ class __EditExpenseSheetState extends State<_EditExpenseSheet> {
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: Colors.deepPurple.shade900,
+                        color: isDark ? Colors.white : Colors.deepPurple.shade900,
                       ),
                     ),
                   ],
@@ -1775,20 +1792,36 @@ class __EditExpenseSheetState extends State<_EditExpenseSheet> {
                 if (_selectedGroup != null) ...[
                   Text(
                     '👥 دریافت کنندگان:',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.deepPurple.shade900),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: isDark ? Colors.purple.shade200 : Colors.deepPurple.shade900,
+                    ),
                   ),
                   SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
+                    runSpacing: 8,
                     children: _selectedGroup!.getMembers(appState.members).map((user) {
                       final isSelected = _selectedReceivers.contains(user);
                       return FilterChip(
                         selected: isSelected,
                         label: Text(user.name),
-                        selectedColor: Colors.deepPurple.shade100,
-                        checkmarkColor: Colors.deepPurple,
+                        selectedColor: isDark ? Colors.purple.shade800 : Colors.deepPurple.shade100,
+                        checkmarkColor: isDark ? Colors.white : Colors.deepPurple,
+                        backgroundColor: isDark ? theme.colorScheme.surfaceContainerHighest : Colors.grey.shade200,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          side: BorderSide(
+                            color: isSelected
+                                ? (isDark ? Colors.purple.shade300 : Colors.deepPurple)
+                                : Colors.transparent,
+                          ),
+                        ),
                         labelStyle: TextStyle(
-                          color: isSelected ? Colors.deepPurple.shade900 : Colors.black87,
+                          color: isSelected
+                              ? (isDark ? Colors.white : Colors.deepPurple.shade900)
+                              : (isDark ? Colors.white.withValues(alpha: 0.9) : Colors.black87),
                           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                         ),
                         onSelected: (bool selected) {
@@ -1810,11 +1843,11 @@ class __EditExpenseSheetState extends State<_EditExpenseSheet> {
                 // نوع تقسیم
                 if (_selectedReceivers.isNotEmpty) ...[
                   Card(
-                    color: Colors.deepPurple.shade50.withOpacity(0.5),
+                    color: isDark ? theme.colorScheme.surfaceContainerHighest : Colors.deepPurple.shade50.withValues(alpha: 0.5),
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
-                      side: BorderSide(color: Colors.deepPurple.shade200),
+                      side: BorderSide(color: isDark ? Colors.purple.shade300 : Colors.deepPurple.shade200),
                     ),
                     child: Padding(
                       padding: const EdgeInsets.all(12.0),
@@ -1823,14 +1856,17 @@ class __EditExpenseSheetState extends State<_EditExpenseSheet> {
                         children: [
                           Text(
                             'نوع تقسیم هزینه:',
-                            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepPurple.shade900),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.purple.shade200 : Colors.deepPurple.shade900,
+                            ),
                           ),
                           Row(
                             children: [
                               Expanded(
                                 child: RadioListTile<bool>(
-                                  title: Text('تقسیم مساوی', style: TextStyle(fontSize: 14)),
-                                  activeColor: Colors.deepPurple,
+                                  title: Text('تقسیم مساوی', style: TextStyle(fontSize: 14, color: isDark ? Colors.white : Colors.black87)),
+                                  activeColor: isDark ? Colors.purple.shade300 : Colors.deepPurple,
                                   value: true,
                                   groupValue: _isEqualSplit,
                                   onChanged: (value) => setState(() {
@@ -1841,8 +1877,8 @@ class __EditExpenseSheetState extends State<_EditExpenseSheet> {
                               ),
                               Expanded(
                                 child: RadioListTile<bool>(
-                                  title: Text('تقسیم غیرمساوی', style: TextStyle(fontSize: 14)),
-                                  activeColor: Colors.deepPurple,
+                                  title: Text('تقسیم غیرمساوی', style: TextStyle(fontSize: 14, color: isDark ? Colors.white : Colors.black87)),
+                                  activeColor: isDark ? Colors.purple.shade300 : Colors.deepPurple,
                                   value: false,
                                   groupValue: _isEqualSplit,
                                   onChanged: (value) {
@@ -1864,7 +1900,11 @@ class __EditExpenseSheetState extends State<_EditExpenseSheet> {
                 if (_selectedReceivers.isNotEmpty && !_isEqualSplit) ...[
                   Text(
                     '💰 مبلغ هر نفر:',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.deepPurple.shade900),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: isDark ? Colors.purple.shade200 : Colors.deepPurple.shade900,
+                    ),
                   ),
                   SizedBox(height: 8),
                   ..._selectedReceivers.map((user) {
@@ -1874,7 +1914,7 @@ class __EditExpenseSheetState extends State<_EditExpenseSheet> {
                         children: [
                           Expanded(
                             flex: 2,
-                            child: Text(user.name, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepPurple)),
+                            child: Text(user.name, style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.purple.shade200 : Colors.deepPurple)),
                           ),
                           Expanded(
                             flex: 3,
@@ -1912,20 +1952,20 @@ class __EditExpenseSheetState extends State<_EditExpenseSheet> {
 
                 // انتخاب تاریخ
                 Card(
-                  color: Colors.deepPurple.shade50.withOpacity(0.5),
+                  color: isDark ? theme.colorScheme.surfaceContainerHighest : Colors.deepPurple.shade50.withValues(alpha: 0.5),
                   elevation: 0,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
-                    side: BorderSide(color: Colors.deepPurple.shade200),
+                    side: BorderSide(color: isDark ? Colors.purple.shade300 : Colors.deepPurple.shade200),
                   ),
                   child: ListTile(
-                    leading: Icon(Icons.calendar_today_rounded, color: Colors.deepPurple),
-                    title: Text('تاریخ ثبت هزینه', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    leading: Icon(Icons.calendar_today_rounded, color: isDark ? Colors.purple.shade300 : Colors.deepPurple),
+                    title: Text('تاریخ ثبت هزینه', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : Colors.black87)),
                     subtitle: Text(
                       _formatJalaliDate(_selectedJalali),
-                      style: TextStyle(fontSize: 14, color: Colors.deepPurple.shade800),
+                      style: TextStyle(fontSize: 14, color: isDark ? Colors.purple.shade200 : Colors.deepPurple.shade800),
                     ),
-                    trailing: Icon(Icons.edit_rounded, color: Colors.deepPurple, size: 20),
+                    trailing: Icon(Icons.edit_rounded, color: isDark ? Colors.purple.shade300 : Colors.deepPurple, size: 20),
                     onTap: () async {
                       final picked = await showPersianDatePicker(
                         context: context,
